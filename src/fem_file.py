@@ -3,36 +3,26 @@ import re
 from pathlib import Path
 
 
-class TEMFile:
+class FEMFile:
     """
-    Maxwell TEM file object
+    Maxwell FEM file object
     """
 
     def __init__(self):
         self.filepath = None
 
         self.line = None
-        self.config = 'fixed_loop'
+        self.config = None
         self.elevation = 0.
-        self.units = 'nT/s'
+        self.units = '%Ht'
         self.current = 1.
-        self.tx_turns = 1.
-        self.base_freq = 1.
-        self.duty_cycle = 50.
-        self.on_time = 50.
-        self.off_time = 50.
-        self.turn_on = 0.
-        self.turn_off = 0.
-        self.timing_mark = 0.
-        self.rx_area_x = 4000.
-        self.rx_area_y = 4000.
-        self.rx_area_z = 4000.
+        self.tx_moment = 1.
+        self.h_sep = 1.
+        self.v_sep = 0.
+        self.rx_area_hcp = 1.
         self.rx_dipole = False
         self.tx_dipole = False
-        self.loop = None
-        self.loop_coords = pd.DataFrame(columns=['Easting', 'Northing', 'Elevation'], dtype=float)
-        self.ch_times = []
-        self.ch_widths = []
+        self.frequencies = []
         self.data = pd.DataFrame()
 
     def parse(self, filepath):
@@ -53,22 +43,10 @@ class TEMFile:
             value = match.split(':')
             header_dict[value[0]] = value[1]
 
-        # Loop name
-        loop = split_content[3][5:-2]  # Remove "LOOP:" and " &"
+        # TODO Need more frequencies
 
-        # Parse the loop coordinates
-        loop_coords_match = [c for c in split_content if 'LV' in c.upper()]
-        loop_coords = []
-        for match in loop_coords_match:
-            if 'LV' in match:
-                values = [re.search(r'LV\d+\w:(.*)', m).group(1) for m in match.strip().split(' ')]
-                loop_coords.append(values)
-        loop_coords = pd.DataFrame(loop_coords, columns=['Easting', 'Northing', 'Elevation']).astype(float)
-
-        global ch_times, cols
-        # Channel times and widths
-        ch_times = content.split(r'/TIMES(')[1].split('\n')[0][4:].split(',')
-        ch_widths = content.split(r'/TIMESWIDTH(')[1].split('\n')[0][4:].split(',')
+        global frequencies, cols
+        frequencies = content.split(r'/FREQ=')[1].split('\n')[0].split(',')
 
         # Data
 
@@ -122,7 +100,7 @@ class TEMFile:
 
 
 if __name__ == '__main__':
-    tem = TEMFile()
+    fem = FEMFile()
 
-    file = r'C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Maxwell files\V_1x1_450_50_100 50msec instant on-time first.tem'
-    tem_file = tem.parse(file)
+    file = r'C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Maxwell files\Test #2.fem'
+    fem_file = fem.parse(file)
