@@ -45,23 +45,33 @@ class FEMFile:
 
         # The top two lines of headers
         header = split_content[1].split()
-        header.extend([split_content[2]])
+        # Ignore loop name because the spaces in the name causes problems with files that are dipole tx
+        if 'loop' not in split_content[2].lower():
+            header.extend(split_content[2].split())
+
         header_dict = {}
         for match in header:
             value = match.split(':')
             header_dict[value[0]] = value[1]
 
-        # Loop name
-        loop = split_content[3][5:-2]  # Remove "LOOP:" and " &"
+        self.rx_dipole = True if header_dict['RXDIPOLE'] == 'YES' else False
+        self.tx_dipole = True if header_dict['TXDIPOLE'] == 'YES' else False
 
-        # Parse the loop coordinates
-        loop_coords_match = [c for c in split_content if 'LV' in c.upper()]
-        loop_coords = []
-        for match in loop_coords_match:
-            if 'LV' in match:
-                values = [re.search(r'LV\d+\w:(.*)', m).group(1) for m in match.strip().split(' ')]
-                loop_coords.append(values)
-        loop_coords = pd.DataFrame(loop_coords, columns=['Easting', 'Northing', 'Elevation']).astype(float)
+        if not self.tx_dipole:
+            # Loop name
+            loop = split_content[2].split(':')[1]
+
+            # Parse the loop coordinates
+            loop_coords_match = [c for c in split_content if 'LV' in c.upper()]
+            loop_coords = []
+            for match in loop_coords_match:
+                if 'LV' in match:
+                    values = [re.search(r'LV\d+\w:(.*)', m).group(1) for m in match.strip().split(' ')]
+                    loop_coords.append(values)
+            loop_coords = pd.DataFrame(loop_coords, columns=['Easting', 'Northing', 'Elevation']).astype(float)
+
+            self.loop = loop
+            self.loop_coords = loop_coords
 
         # TODO Need more frequencies
         global frequencies, cols
@@ -75,7 +85,9 @@ class FEMFile:
         cols.extend(frequencies)
         cols.extend(['Distance', 'Calc_this'])
         data = pd.DataFrame([match.split() for match in data_match[:-1]], columns=cols)
-        data.iloc[:, 0:4] = data.iloc[:, 0:4].astype(float)
+        data.iloc[:, 0:3] = data.iloc[:, 0:3].astype(float)
+        data.iloc[:, 3] = data.iloc[:, 3].astype(float).astype(int)
+        data.iloc[:, 4] = data.iloc[:, 4].astype(str)
         data.iloc[:, 5:] = data.iloc[:, 5:].astype(float)
 
         # Set the attributes
@@ -84,8 +96,6 @@ class FEMFile:
         self.elevation = header_dict['ELEV']
         self.units = header_dict['ELEV']
         self.current = header_dict['CURRENT']
-        self.rx_dipole = True if header_dict['RXDIPOLE'] == 'YES' else False
-        self.tx_dipole = True if header_dict['TXDIPOLE'] == 'YES' else False
 
         if self.rx_dipole:
             self.rx_area_hcp = header_dict['RXAREAHCP']
@@ -106,9 +116,7 @@ class FEMFile:
             self.v_sep = header_dict['VSEP']
 
         self.frequencies = frequencies
-        self.loop = loop
-        self.loop_coords = loop_coords
-        self.data = pd.DataFrame()
+        self.data = data
 
         return self
 
@@ -116,6 +124,7 @@ class FEMFile:
 if __name__ == '__main__':
     fem = FEMFile()
 
-    # file = r'C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Maxwell files\Test #2.fem'
-    file = r'C:\Users\kajth\PycharmProjects\IRAP_Modelling\sample_files\Maxwell files\Test 4 FEM files\Test 4 - h=5m.fem'
+    sample_files = Path(__file__).parents[1].joinpath('sample_files')
+    file = sample_files.joinpath(r'Maxwell files\Test #2.fem')
+    # file = sample_files.joinpath(r'Maxwell files\Test 4 FEM files\Test 4 - h=5m.fem')
     fem_file = fem.parse(file)

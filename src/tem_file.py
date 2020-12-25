@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import re
 from pathlib import Path
 
@@ -54,7 +55,7 @@ class TEMFile:
             header_dict[value[0]] = value[1]
 
         # Loop name
-        loop = split_content[3][5:-2]  # Remove "LOOP:" and " &"
+        loop = split_content[3].split(':')[1]
 
         # Parse the loop coordinates
         loop_coords_match = [c for c in split_content if 'LV' in c.upper()]
@@ -71,27 +72,17 @@ class TEMFile:
         ch_widths = content.split(r'/TIMESWIDTH(')[1].split('\n')[0][4:].split(',')
 
         # Data
-
-        def data_to_readings(row):
-            reading = row.iloc[len(cols):len(ch_times) - len(cols)].to_numpy().astype(float)
-            return reading
-
         data_match = content.split(r'/PROFILEX:')[1].split('\n')[1:]
         # Headers that are always there (?)
         cols = ['Easting', 'Northing', 'Elevation', 'Station', 'Component', 'Dircosz', 'Dircose', 'Dircosn']
-        data = pd.DataFrame([match.split() for match in data_match[:-1]])
-        data.iloc[:, 0:4] = data.iloc[:, 0:4].astype(float)
+        # Add the channel numbers as column names
+        cols.extend(np.arange(0, len(ch_times)).astype(str))
+        cols.extend(['Distance', 'Calc_this'])
+        data = pd.DataFrame([match.split() for match in data_match[:-1]], columns=cols)
+        data.iloc[:, 0:3] = data.iloc[:, 0:3].astype(float)
+        data.iloc[:, 3] = data.iloc[:, 3].astype(float).astype(int)
+        data.iloc[:, 4] = data.iloc[:, 4].astype(str)
         data.iloc[:, 5:] = data.iloc[:, 5:].astype(float)
-
-        # Combine the channel column readings into numpy arrays
-        readings = data.apply(data_to_readings, axis=1)
-
-        # Remove the old channel columns
-        data = data.drop(columns=range(len(cols), len(cols) + len(ch_times)))
-        # Update the column names
-        cols.extend(['Distance', 'Calc_this', 'Reading'])
-        data['Reading'] = readings
-        data.columns = cols
 
         # Set the attributes
         self.line = header_dict['LINE']
@@ -116,7 +107,7 @@ class TEMFile:
         self.loop_coords = loop_coords
         self.ch_times = ch_times
         self.ch_widths = ch_widths
-        self.data = pd.DataFrame()
+        self.data = data
 
         return self
 
@@ -124,5 +115,6 @@ class TEMFile:
 if __name__ == '__main__':
     tem = TEMFile()
 
-    file = r'C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Maxwell files\V_1x1_450_50_100 50msec instant on-time first.tem'
+    sample_files = Path(__file__).parents[1].joinpath('sample_files')
+    file = sample_files.joinpath(r'Maxwell files\V_1x1_450_50_100 50msec instant on-time first.tem')
     tem_file = tem.parse(file)
