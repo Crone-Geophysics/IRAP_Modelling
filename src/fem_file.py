@@ -39,6 +39,7 @@ class FEMFile:
         if not self.filepath.is_file():
             raise ValueError(f"{self.filepath.name} is not a file.")
 
+        print(f"Parsing {self.filepath.name}")
         with open(filepath, 'r') as file:
             content = file.read()
             split_content = re.sub(' &', '', content).split('\n')
@@ -117,7 +118,7 @@ class FEMFile:
 
         self.frequencies = frequencies
         self.data = data
-
+        print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
 
@@ -125,6 +126,6 @@ if __name__ == '__main__':
     fem = FEMFile()
 
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
-    file = sample_files.joinpath(r'Maxwell files\Test #2.fem')
-    # file = sample_files.joinpath(r'Maxwell files\Test 4 FEM files\Test 4 - h=5m.fem')
+    # file = sample_files.joinpath(r'Maxwell files\Test #2.fem')
+    file = sample_files.joinpath(r'Maxwell files\Test 4 FEM files\Test 4 - h=5m.fem')
     fem_file = fem.parse(file)

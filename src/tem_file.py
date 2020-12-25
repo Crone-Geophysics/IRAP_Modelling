@@ -42,6 +42,7 @@ class TEMFile:
         if not self.filepath.is_file():
             raise ValueError(f"{self.filepath.name} is not a file.")
 
+        print(f"Parsing {self.filepath.name}")
         with open(filepath, 'r') as file:
             content = file.read()
             split_content = re.sub(' &', '', content).split('\n')
@@ -108,7 +109,7 @@ class TEMFile:
         self.ch_times = ch_times
         self.ch_widths = ch_widths
         self.data = data
-
+        print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
 

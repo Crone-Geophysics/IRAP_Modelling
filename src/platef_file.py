@@ -6,7 +6,7 @@ from pathlib import Path
 
 class PlateFFile:
     """
-    Maxwell FEM file object
+    PLATEF TEM file object
     """
 
     def __init__(self):
@@ -23,9 +23,10 @@ class PlateFFile:
         if not self.filepath.is_file():
             raise ValueError(f"{self.filepath.name} is not a file.")
 
+        print(f"Parsing {self.filepath.name}")
         with open(filepath, 'r') as file:
             content = file.read()
-            split_content = re.sub(' &', '', content).split('\n')
+            split_content = content.split('\n')
 
         # The top two lines of headers
         data_start = int(split_content[1].split()[0])
@@ -55,6 +56,7 @@ class PlateFFile:
         self.current = current
         self.rx_area = rx_area
 
+        print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
 
