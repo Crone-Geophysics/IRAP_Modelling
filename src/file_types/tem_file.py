@@ -40,7 +40,7 @@ class TEMFile:
         self.filepath = Path(filepath)
 
         if not self.filepath.is_file():
-            raise ValueError(f"{self.filepath.name} is not a file.")
+            raise ValueError(f"{self.filepath} is not a file.")
 
         print(f"Parsing {self.filepath.name}")
         with open(filepath, 'r') as file:
@@ -116,6 +116,6 @@ class TEMFile:
 if __name__ == '__main__':
     tem = TEMFile()
 
-    sample_files = Path(__file__).parents[1].joinpath('sample_files')
+    sample_files = Path(__file__).parents[2].joinpath('sample_files')
     file = sample_files.joinpath(r'Maxwell files\V_1x1_450_50_100 50msec instant on-time first.tem')
     tem_file = tem.parse(file)

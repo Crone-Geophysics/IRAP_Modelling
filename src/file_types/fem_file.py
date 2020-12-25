@@ -37,7 +37,7 @@ class FEMFile:
         self.filepath = Path(filepath)
 
         if not self.filepath.is_file():
-            raise ValueError(f"{self.filepath.name} is not a file.")
+            raise ValueError(f"{self.filepath} is not a file.")
 
         print(f"Parsing {self.filepath.name}")
         with open(filepath, 'r') as file:
@@ -125,7 +125,7 @@ class FEMFile:
 if __name__ == '__main__':
     fem = FEMFile()
 
-    sample_files = Path(__file__).parents[1].joinpath('sample_files')
+    sample_files = Path(__file__).parents[2].joinpath('sample_files')
     # file = sample_files.joinpath(r'Maxwell files\Test #2.fem')
     file = sample_files.joinpath(r'Maxwell files\Test 4 FEM files\Test 4 - h=5m.fem')
     fem_file = fem.parse(file)

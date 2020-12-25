@@ -21,7 +21,7 @@ class PlateFFile:
         self.filepath = Path(filepath)
 
         if not self.filepath.is_file():
-            raise ValueError(f"{self.filepath.name} is not a file.")
+            raise ValueError(f"{self.filepath} is not a file.")
 
         print(f"Parsing {self.filepath.name}")
         with open(filepath, 'r') as file:
@@ -63,6 +63,6 @@ class PlateFFile:
 if __name__ == '__main__':
     platef = PlateFFile()
 
-    sample_files = Path(__file__).parents[1].joinpath('sample_files')
+    sample_files = Path(__file__).parents[2].joinpath('sample_files')
     file = sample_files.joinpath(r'PLATEF files\450_50.dat')
     parsed_file = platef.parse(file)

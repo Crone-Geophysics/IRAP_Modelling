@@ -21,7 +21,7 @@ class MUNFile:
         self.filepath = Path(filepath)
 
         if not self.filepath.is_file():
-            raise ValueError(f"{self.filepath.name} is not a file.")
+            raise ValueError(f"{self.filepath} is not a file.")
 
         print(f"Parsing {self.filepath.name}")
         with open(filepath, 'r') as file:
@@ -58,6 +58,6 @@ class MUNFile:
 if __name__ == '__main__':
     parser = MUNFile()
 
-    sample_files = Path(__file__).parents[1].joinpath('sample_files')
+    sample_files = Path(__file__).parents[2].joinpath('sample_files')
     file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
     mun_file = parser.parse(file)
