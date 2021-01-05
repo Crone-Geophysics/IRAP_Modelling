@@ -14,17 +14,15 @@
    <string>MainWindow</string>
   </property>
   <widget class="QWidget" name="centralwidget">
-   <layout class="QGridLayout" name="gridLayout">
-    <item row="0" column="0">
+   <layout class="QHBoxLayout" name="horizontalLayout">
+    <item>
      <widget class="QSplitter" name="splitter">
       <property name="orientation">
        <enum>Qt::Horizontal</enum>
       </property>
-      <widget class="QWidget" name="formLayoutWidget">
-       <layout class="QFormLayout" name="files_layout"/>
-      </widget>
+      <widget class="QTabWidget" name="tab_widget"/>
       <widget class="QWidget" name="verticalLayoutWidget">
-       <layout class="QVBoxLayout" name="canvas_layout" stretch=""/>
+       <layout class="QVBoxLayout" name="canvas_layout"/>
       </widget>
      </widget>
     </item>

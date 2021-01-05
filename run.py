@@ -1,4 +1,6 @@
+from src.plotter import Plotter
 
 
 if __name__ == '__main__':
-    pass
+    plotter = Plotter()
+    plotter.show()
