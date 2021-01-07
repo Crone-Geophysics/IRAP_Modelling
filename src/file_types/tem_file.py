@@ -1,7 +1,37 @@
-import pandas as pd
-import numpy as np
 import re
 from pathlib import Path
+
+import pandas as pd
+from PyQt5.QtWidgets import (QLabel, QLineEdit, QFormLayout, QWidget, QCheckBox)
+
+
+class TEMTab(QWidget):
+
+    def __init__(self):
+        super().__init__()
+        self.layout = QFormLayout()
+        self.setLayout(self.layout)
+
+        self.plot_cbox = QCheckBox("Show")
+        self.legend_name = QLineEdit()
+
+        self.layout.addRow(self.plot_cbox)
+        self.layout.addRow("Legend Name", self.legend_name)
+
+    def read(self, filepath):
+        if not isinstance(filepath, Path):
+            filepath = Path(filepath)
+
+        ext = filepath.suffix.lower()
+
+        if ext == '.fem':
+            parser = TEMFile()
+            f = parser.parse(filepath)
+        else:
+            raise ValueError(f"{ext} is not yet supported.")
+
+        if f is None:
+            raise ValueError(F"No data found in {filepath.name}.")
 
 
 class TEMFile:
@@ -73,13 +103,16 @@ class TEMFile:
         ch_widths = content.split(r'/TIMESWIDTH(')[1].split('\n')[0][4:].split(',')
 
         # Data
-        data_match = content.split(r'/PROFILEX:')[1].split('\n')[1:]
+        top_section, data_section = content.split(r'/PROFILEX:')
+        data_columns = top_section.split('\n')[-2].split()
+        data_match = data_section.split('\n')[1:]
+        # data_match = content.split(r'/PROFILEX:')[1].split('\n')[1:]
         # Headers that are always there (?)
-        cols = ['Easting', 'Northing', 'Elevation', 'Station', 'Component', 'Dircosz', 'Dircose', 'Dircosn']
+        # cols = ['Easting', 'Northing', 'Elevation', 'Station', 'Component', 'Dircosz', 'Dircose', 'Dircosn']
         # Add the channel numbers as column names
-        cols.extend(np.arange(0, len(ch_times)).astype(str))
-        cols.extend(['Distance', 'Calc_this'])
-        data = pd.DataFrame([match.split() for match in data_match[:-1]], columns=cols)
+        # cols.extend(np.arange(0, len(ch_times)).astype(str))
+        # cols.extend(['Distance', 'Calc_this'])
+        data = pd.DataFrame([match.split() for match in data_match[:-1]], columns=data_columns)
         data.iloc[:, 0:3] = data.iloc[:, 0:3].astype(float)
         data.iloc[:, 3] = data.iloc[:, 3].astype(float).astype(int)
         data.iloc[:, 4] = data.iloc[:, 4].astype(str)

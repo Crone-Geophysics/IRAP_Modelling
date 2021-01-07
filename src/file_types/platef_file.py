@@ -1,7 +1,37 @@
-import pandas as pd
-import numpy as np
 import re
 from pathlib import Path
+
+import pandas as pd
+from PyQt5.QtWidgets import (QLabel, QLineEdit, QFormLayout, QWidget, QCheckBox)
+
+
+class PlateFTab(QWidget):
+
+    def __init__(self):
+        super().__init__()
+        self.layout = QFormLayout()
+        self.setLayout(self.layout)
+
+        self.plot_cbox = QCheckBox("Show")
+        self.legend_name = QLineEdit()
+
+        self.layout.addRow(self.plot_cbox)
+        self.layout.addRow("Legend Name", self.legend_name)
+
+    def read(self, filepath):
+        if not isinstance(filepath, Path):
+            filepath = Path(filepath)
+
+        ext = filepath.suffix.lower()
+
+        if ext == '.dat':
+            parser = PlateFFile()
+            f = parser.parse(filepath)
+        else:
+            raise ValueError(f"{ext} is not yet supported.")
+
+        if f is None:
+            raise ValueError(F"No data found in {filepath.name}.")
 
 
 class PlateFFile:
