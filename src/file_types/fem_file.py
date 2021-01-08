@@ -81,11 +81,12 @@ class FEMTab(QWidget):
         self.data = file.data
         self.file = file
 
-    def plot(self, axes, color):
+    def plot(self, axes, color, alpha):
         """
         Plot the data on a mpl axes
         """
         self.lines = []
+        count = 10
 
         for freq in self.file.frequencies:
             x = self.data.STATION.astype(float)
@@ -96,6 +97,8 @@ class FEMTab(QWidget):
                 line = axes.scatter(x, y,
                                     color=color,
                                     marker=style,
+                                    s=count,
+                                    alpha=alpha,
                                     label=f"{freq} ({self.file.filepath.name})")
 
             else:
@@ -103,8 +106,10 @@ class FEMTab(QWidget):
                 line, = axes.plot(x, y,
                                   ls=style,
                                   color=color,
+                                  alpha=alpha,
                                   label=f"{freq} ({self.file.filepath.name})")
             self.lines.append(line)
+            count += 10
 
         return self.lines
 

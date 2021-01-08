@@ -19,8 +19,8 @@ from src.file_types.tem_file import TEMFile, TEMTab
 from src.file_types.platef_file import PlateFFile, PlateFTab
 from src.file_types.mun_file import MUNFile, MUNTab
 from PyQt5 import (QtCore, uic)
-from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QInputDialog, QErrorMessage, QFileDialog,
-                             QLineEdit, QFormLayout, QWidget, QCheckBox)
+from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
+                             QLineEdit, QSpinBox, QHBoxLayout, QLabel)
 
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
@@ -65,11 +65,26 @@ class Plotter(QMainWindow, plotterUI):
         self.canvas_frame.layout().addWidget(self.fem_canvas)
         self.canvas_frame.layout().addWidget(toolbar)
 
+        # Status bar
+        self.alpha_frame = QFrame()
+        self.alpha_frame.setLayout(QHBoxLayout())
+        self.alpha_frame.layout().addWidget(QLabel("Plot Alpha: "))
+        self.alpha_frame.setMaximumWidth(150)
+
+        self.alpha_sbox = QSpinBox()
+        self.alpha_sbox.setSingleStep(10)
+        self.alpha_sbox.setRange(0, 100)
+        self.alpha_sbox.setValue(100)
+
+        self.alpha_frame.layout().addWidget(self.alpha_sbox)
+        self.statusBar().addPermanentWidget(self.alpha_frame)
+
         # Signals
         self.actionOpen.triggered.connect(self.open_file_dialog)
         self.actionPrint_to_PDF.triggered.connect(self.print_pdf)
 
         self.tab_widget.tabCloseRequested.connect(self.update_tab_plot)
+        self.alpha_sbox.valueChanged.connect(self.update_alpha)
 
     def keyPressEvent(self, e):
         if e.key() == QtCore.Qt.Key_Space:
@@ -185,8 +200,9 @@ class Plotter(QMainWindow, plotterUI):
         self.tab_widget.addTab(tab, filepath.name)
 
         # Plot the data from the file
+        alpha = self.alpha_sbox.value() / 100
         c = next(color)  # Cycles through colors
-        tab.plot(self.ax, c)
+        tab.plot(self.ax, c, alpha)
 
         # Add the Y axis label
         if not self.ax.get_ylabel() or self.tab_widget.count() == 1:
@@ -215,6 +231,18 @@ class Plotter(QMainWindow, plotterUI):
         else:
             self.ax.legend()
 
+        self.fem_canvas.draw()
+        self.fem_canvas.flush_events()
+
+    def update_alpha(self, alpha):
+        print(f"New alpha: {alpha / 100}")
+        for artist in self.ax.lines:
+            artist.set_alpha(alpha / 100)
+
+        for artist in self.ax.collections:
+            artist.set_alpha(alpha / 100)
+
+        self.update_legend()
         self.fem_canvas.draw()
         self.fem_canvas.flush_events()
 
