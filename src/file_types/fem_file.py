@@ -14,17 +14,18 @@ class FEMTab(QWidget):
         self.layout = QFormLayout()
         self.setLayout(self.layout)
 
-        self.plot_cbox = QCheckBox("Show")
+        self.plot_cbox = QCheckBox("Plot")
+        self.plot_cbox.setFocusPolicy(QtCore.Qt.NoFocus)
         self.plot_cbox.setChecked(True)
         self.plot_cbox.toggled.connect(lambda: self.show_sig.emit())
 
-        self.legend_name = QLineEdit()
-
         self.layout.addRow(self.plot_cbox)
         self.layout.addRow("File Type", QLabel("Maxwell FEM"))
-        self.layout.addRow("Legend Name", self.legend_name)
 
-        self.f = None
+        # self.legend_name = QLineEdit()
+        # self.layout.addRow("Legend Name", self.legend_name)
+
+        self.file = None
         self.lines = []
         self.data = pd.DataFrame()
 
@@ -37,59 +38,72 @@ class FEMTab(QWidget):
         if ext == '.fem':
             parser = FEMFile()
             try:
-                f = parser.parse(filepath)
+                file = parser.parse(filepath)
             except Exception as e:
                 raise Exception(f"The following error occurred trying to parse the file: {e}.")
         else:
             raise ValueError(f"{ext} is not yet supported.")
 
-        if f is None:
+        if file is None:
             raise ValueError(F"No data found in {filepath.name}.")
 
         # Add the file name as the default for the name in the legend
-        self.legend_name.setText(f.line)
-        self.layout.addRow('Configuration', QLabel(f.config))
-        self.layout.addRow('Elevation', QLabel(str(f.elevation)))
-        self.layout.addRow('Units', QLabel(f.units))
-        self.layout.addRow('Current', QLabel(str(f.current)))
+        # self.legend_name.setText(filepath.name)
+        self.layout.addRow('Line', QLabel(file.line))
+        self.layout.addRow('Configuration', QLabel(file.config))
+        self.layout.addRow('Elevation', QLabel(str(file.elevation)))
+        self.layout.addRow('Units', QLabel(file.units))
+        self.layout.addRow('Current', QLabel(str(file.current)))
 
-        self.layout.addRow('Rx Dipole', QLabel(str(f.rx_dipole)))
+        self.layout.addRow('Rx Dipole', QLabel(str(file.rx_dipole)))
 
-        if f.rx_dipole:
-            self.layout.addRow('Rx Area (HCP)', QLabel(f.rx_area_hcp))
+        if file.rx_dipole:
+            self.layout.addRow('Rx Area (HCP)', QLabel(file.rx_area_hcp))
         else:
-            self.layout.addRow('Rx Area X', QLabel(f.rx_area_x))
-            self.layout.addRow('Rx Area Y', QLabel(f.rx_area_y))
-            self.layout.addRow('Rx Area Z', QLabel(f.rx_area_z))
+            self.layout.addRow('Rx Area X', QLabel(file.rx_area_x))
+            self.layout.addRow('Rx Area Y', QLabel(file.rx_area_y))
+            self.layout.addRow('Rx Area Z', QLabel(file.rx_area_z))
 
-        self.layout.addRow('Tx Dipole', QLabel(str(f.tx_dipole)))
-        if f.tx_dipole:
-            self.layout.addRow('Tx Moment', QLabel(f.tx_moment))
+        self.layout.addRow('Tx Dipole', QLabel(str(file.tx_dipole)))
+        if file.tx_dipole:
+            self.layout.addRow('Tx Moment', QLabel(file.tx_moment))
         else:
-            self.layout.addRow('Tx Turns', QLabel(f.tx_turns))
+            self.layout.addRow('Tx Turns', QLabel(file.tx_turns))
 
-        if f.rx_dipole and f.tx_dipole:
-            self.layout.addRow('Horizontal Separation', QLabel(f.h_sep))
-            self.layout.addRow('Vertical Separation', QLabel(f.v_sep))
+        if file.rx_dipole and file.tx_dipole:
+            self.layout.addRow('Horizontal Separation', QLabel(file.h_sep))
+            self.layout.addRow('Vertical Separation', QLabel(file.v_sep))
 
-        self.layout.addRow('Frequencies', QLabel(', '.join(f.frequencies)))
+        self.layout.addRow('Frequencies', QLabel(', '.join(file.frequencies)))
 
-        if not f.loop_coords.empty:
-            self.layout.addRow('Loop Coordinates', QLabel(f.loop_coords.to_string()))
-        self.data = f.data
-        self.f = f
+        if not file.loop_coords.empty:
+            self.layout.addRow('Loop Coordinates', QLabel(file.loop_coords.to_string()))
+        self.data = file.data
+        self.file = file
 
-    def plot(self, axes):
+    def plot(self, axes, color):
         """
         Plot the data on a mpl axes
         """
         self.lines = []
 
-        for freq in self.f.frequencies:
-            style = '--' if 'Q' in freq else '-'
-            line, = axes.plot(self.data.STATION.astype(float), self.data.loc[:, freq].astype(float),
-                              ls=style,
-                              label=f"{freq} ({self.f.filepath.name})")
+        for freq in self.file.frequencies:
+            x = self.data.STATION.astype(float)
+            y = self.data.loc[:, freq].astype(float)
+
+            if len(x) == 1:
+                style = 'x' if 'Q' in freq else 'o'
+                line = axes.scatter(x, y,
+                                    color=color,
+                                    marker=style,
+                                    label=f"{freq} ({self.file.filepath.name})")
+
+            else:
+                style = '--' if 'Q' in freq else '-'
+                line, = axes.plot(x, y,
+                                  ls=style,
+                                  color=color,
+                                  label=f"{freq} ({self.file.filepath.name})")
             self.lines.append(line)
 
         return self.lines
