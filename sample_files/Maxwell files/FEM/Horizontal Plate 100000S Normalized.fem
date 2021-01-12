@@ -1,0 +1,12 @@
+TEM File Created by MAXWELL 7.10.144.51461
+LINE:10000N DATATYPE:FEM CONFIG:FIXEDLOOP ELEV:0.000 UNITS:(nT) CURRENT:17.678 TXTURNS:1.000 RXAREAHCP:10000.000 RXDIPOLE:YES TXDIPOLE:NO &
+LOOP:Loop 1 &
+LV1X:10100.00 LV1Y:9900.00 LV1Z:0.00 &
+LV2X:9900.00 LV2Y:9900.00 LV2Z:0.00 &
+LV3X:9900.00 LV3Y:10100.00 LV3Z:0.00 &
+LV4X:10100.00 LV4Y:10100.00 LV4Z:0.00 
+/FREQ=Q1,I1,Q10,I10,Q100,I100,Q1000,I1000,Q10000,I10000
+/Data is normalized to the primary field. Values are %, not nT
+           EAST           NORTH           LEVEL         STATION       COMPONENT            RXHT         DIRCOSZ         DIRCOSE         DIRCOSN              Q1              I1             Q10             I10            Q100            I100           Q1000           I1000          Q10000          I10000           DISTC        CALCTHIS    PFIELDT_CALC 
+/PROFILEX:EAST
+      10000.000       10000.000           0.000           0.000             HCP           0.000        1.000000        0.000000        0.000000        0.445163        2.104727        0.052552        2.245195        0.005270        2.247272        0.000527        2.247293        0.000053        2.247293        0.000000        1.000000      100.000003 

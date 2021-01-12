@@ -1,9 +1,10 @@
 import re
 from pathlib import Path
 
+from natsort import natsorted
 import pandas as pd
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QLabel, QLineEdit, QFormLayout, QWidget, QCheckBox)
+from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox)
 
 
 class FEMTab(QWidget):
@@ -11,6 +12,7 @@ class FEMTab(QWidget):
 
     def __init__(self):
         super().__init__()
+
         self.layout = QFormLayout()
         self.setLayout(self.layout)
 
@@ -26,7 +28,8 @@ class FEMTab(QWidget):
         # self.layout.addRow("Legend Name", self.legend_name)
 
         self.file = None
-        self.lines = []
+        self.hcp_artists = []
+        self.vca_artists = []
         self.data = pd.DataFrame()
 
     def read(self, filepath):
@@ -60,65 +63,101 @@ class FEMTab(QWidget):
         if file.rx_dipole:
             self.layout.addRow('Rx Area (HCP)', QLabel(file.rx_area_hcp))
         else:
-            self.layout.addRow('Rx Area X', QLabel(file.rx_area_x))
-            self.layout.addRow('Rx Area Y', QLabel(file.rx_area_y))
-            self.layout.addRow('Rx Area Z', QLabel(file.rx_area_z))
+            self.layout.addRow('Rx Area X', QLabel(str(file.rx_area_x)))
+            self.layout.addRow('Rx Area Y', QLabel(str(file.rx_area_y)))
+            self.layout.addRow('Rx Area Z', QLabel(str(file.rx_area_z)))
 
         self.layout.addRow('Tx Dipole', QLabel(str(file.tx_dipole)))
         if file.tx_dipole:
-            self.layout.addRow('Tx Moment', QLabel(file.tx_moment))
+            self.layout.addRow('Tx Moment', QLabel(str(file.tx_moment)))
         else:
-            self.layout.addRow('Tx Turns', QLabel(file.tx_turns))
+            self.layout.addRow('Tx Turns', QLabel(str(file.tx_turns)))
 
         if file.rx_dipole and file.tx_dipole:
-            self.layout.addRow('Horizontal Separation', QLabel(file.h_sep))
-            self.layout.addRow('Vertical Separation', QLabel(file.v_sep))
+            self.layout.addRow('Horizontal Separation', QLabel(str(file.h_sep)))
+            self.layout.addRow('Vertical Separation', QLabel(str(file.v_sep)))
 
-        self.layout.addRow('Frequencies', QLabel(', '.join(file.frequencies)))
+        if file.frequencies:
+            self.layout.addRow('Frequencies', QLabel('\n'.join(natsorted(file.frequencies))))
+
+        if file.components:
+            self.layout.addRow('Components', QLabel('\n'.join(natsorted(file.components))))
 
         if not file.loop_coords.empty:
             self.layout.addRow('Loop Coordinates', QLabel(file.loop_coords.to_string()))
+
         self.data = file.data
         self.file = file
 
     def plot(self, axes, color, alpha):
         """
         Plot the data on a mpl axes
+        :param axes: dict of axes object for each component.
+        :param color: str, the color of all lines/scatter points.
+        :param alpha : float
         """
-        self.lines = []
+        self.hcp_artists = []
+        self.vca_artists = []
         count = 10
 
-        for freq in self.file.frequencies:
-            x = self.data.STATION.astype(float)
-            y = self.data.loc[:, freq].astype(float)
+        for component in self.file.components:
+            print(f"Plotting {component} component.")
 
-            if len(x) == 1:
-                style = 'x' if 'Q' in freq else 'o'
-                line = axes.scatter(x, y,
-                                    color=color,
-                                    marker=style,
-                                    s=count,
-                                    alpha=alpha,
-                                    label=f"{freq} ({self.file.filepath.name})")
-
+            # Filter the data by component. If component-by-frequency is active,
+            # find the index of that component and use that to find the frequency.
+            if self.file.comp_by_freq is True:
+                ind = self.file.components.index(component)
+                freq = self.file.frequencies[ind]
+                comp_data = self.data.loc[:, ['STATION', freq]]
             else:
-                style = '--' if 'Q' in freq else '-'
-                line, = axes.plot(x, y,
-                                  ls=style,
-                                  color=color,
-                                  alpha=alpha,
-                                  label=f"{freq} ({self.file.filepath.name})")
-            self.lines.append(line)
-            count += 10
+                comp_data = self.data[self.data.COMPONENT == component]
 
-        return self.lines
+            if comp_data.empty:
+                print(f"No {component} data in {self.file.filepath.name}.")
+                continue
+
+            ax = axes[component]
+            # Easiest to cycle through all frequencies, and simply not plot if there's a
+            # frequency not available in a certain component.
+            # This is mainly a problem caused by component-by-frequency.
+            for freq in self.file.frequencies:
+
+                if freq not in comp_data.columns:
+                    print(f"{freq} is not available in {component}.")
+                    continue
+
+                x = comp_data.STATION.astype(float)
+                y = comp_data.loc[:, freq].astype(float)
+
+                if len(x) == 1:
+                    style = 'x' if 'Q' in freq else 'o'
+                    artist = ax.scatter(x, y,
+                                        color=color,
+                                        marker=style,
+                                        s=count,
+                                        alpha=alpha,
+                                        label=f"{freq} ({self.file.filepath.name})")
+
+                else:
+                    style = '--' if 'Q' in freq else '-'
+                    artist, = ax.plot(x, y,
+                                      ls=style,
+                                      color=color,
+                                      alpha=alpha,
+                                      label=f"{freq} ({self.file.filepath.name})")
+
+                if component == 'HCP':
+                    self.hcp_artists.append(artist)
+                else:
+                    self.vca_artists.append(artist)
+
+                count += 10  # For scatter point size
 
 
 class FEMFile:
     """
     Maxwell FEM file object
     """
-
     def __init__(self):
         self.filepath = None
 
@@ -127,6 +166,7 @@ class FEMFile:
         self.elevation = 0.
         self.units = '%Ht'
         self.current = 1.
+        self.components = []
 
         self.tx_moment = None
         self.tx_turns = None
@@ -140,6 +180,7 @@ class FEMFile:
         self.tx_dipole = False
 
         self.frequencies = []
+        self.comp_by_freq = False
         self.loop_coords = pd.DataFrame()
         self.data = pd.DataFrame()
 
@@ -190,7 +231,6 @@ class FEMFile:
 
         # Create the data frame
         data = pd.DataFrame([match.split() for match in data_match[:-1]], columns=data_columns)
-        # data = data.astype(float)
 
         # Set the attributes
         self.line = header_dict['LINE']
@@ -218,7 +258,25 @@ class FEMFile:
             self.v_sep = header_dict['VSEP']
 
         self.frequencies = frequencies
+
+        if 'COMPONENT' not in data.columns:
+            components = content.split(r'/COMPONENTBYFREQ=')[1].split('\n')[0].split(',')
+            if len(components) != len(frequencies):
+                raise ValueError(F"The number of frequencies does not match the components by frequencies.")
+
+            # If all components are the same
+            if all([components[0] == comp for comp in components]):
+                component = components[0]
+                data['COMPONENT'] = component
+                self.components = [component]
+            else:
+                self.comp_by_freq = True
+                self.components = components
+                data['COMPONENT'] = ', '.join(components)
+        else:
+            self.components = data.COMPONENT.unique()
         self.data = data
+
         print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 

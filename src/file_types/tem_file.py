@@ -1,22 +1,39 @@
 import re
 from pathlib import Path
 
+from natsort import natsorted
 import pandas as pd
-from PyQt5.QtWidgets import (QLabel, QLineEdit, QFormLayout, QWidget, QCheckBox)
+import numpy as np
+from PyQt5 import QtCore
+from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox)
+from matplotlib.pyplot import cm
 
 
 class TEMTab(QWidget):
+    show_sig = QtCore.pyqtSignal()
 
     def __init__(self):
         super().__init__()
+
         self.layout = QFormLayout()
         self.setLayout(self.layout)
 
-        self.plot_cbox = QCheckBox("Show")
-        self.legend_name = QLineEdit()
+        self.plot_cbox = QCheckBox("Plot")
+        self.plot_cbox.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.plot_cbox.setChecked(True)
+        self.plot_cbox.toggled.connect(lambda: self.show_sig.emit())
 
         self.layout.addRow(self.plot_cbox)
-        self.layout.addRow("Legend Name", self.legend_name)
+        self.layout.addRow("File Type", QLabel("Maxwell TEM"))
+
+        # self.legend_name = QLineEdit()
+        # self.layout.addRow("Legend Name", self.legend_name)
+
+        self.file = None
+        self.x_artists = []
+        self.y_artists = []
+        self.z_artists = []
+        self.data = pd.DataFrame()
 
     def read(self, filepath):
         if not isinstance(filepath, Path):
@@ -24,14 +41,99 @@ class TEMTab(QWidget):
 
         ext = filepath.suffix.lower()
 
-        if ext == '.fem':
+        if ext == '.tem':
             parser = TEMFile()
-            f = parser.parse(filepath)
+            try:
+                file = parser.parse(filepath)
+            except Exception as e:
+                raise Exception(f"The following error occurred trying to parse the file: {e}.")
         else:
             raise ValueError(f"{ext} is not yet supported.")
 
-        if f is None:
+        if file is None:
             raise ValueError(F"No data found in {filepath.name}.")
+
+        # Add the file name as the default for the name in the legend
+        # self.legend_name.setText(filepath.name)
+        self.layout.addRow('Line', QLabel(file.line))
+        self.layout.addRow('Configuration', QLabel(file.config))
+        self.layout.addRow('Elevation', QLabel(str(file.elevation)))
+        self.layout.addRow('Units', QLabel(file.units))
+        self.layout.addRow('Current', QLabel(str(file.current)))
+
+        self.layout.addRow('Rx Dipole', QLabel(str(file.rx_dipole)))
+
+        if 'X' in file.components:
+            self.layout.addRow('Rx Area X', QLabel(str(file.rx_area_x)))
+        if 'Y' in file.components:
+            self.layout.addRow('Rx Area Y', QLabel(str(file.rx_area_y)))
+        if 'Z' in file.components:
+            self.layout.addRow('Rx Area Z', QLabel(str(file.rx_area_z)))
+
+        self.layout.addRow('Tx Dipole', QLabel(str(file.tx_dipole)))
+        if file.tx_dipole:
+            self.layout.addRow('Tx Moment', QLabel(str(file.tx_moment)))
+        else:
+            self.layout.addRow('Tx Turns', QLabel(str(file.tx_turns)))
+
+        # Create a data frame with channel times and channel widths
+        channel_times = pd.DataFrame(zip(file.ch_times, file.ch_widths),
+                                     columns=['Times', 'Widths'])
+        self.layout.addRow('Channel Times', QLabel(channel_times.to_string()))
+
+        if not file.loop_coords.empty:
+            self.layout.addRow('Loop Coordinates', QLabel(file.loop_coords.to_string()))
+
+        self.data = file.data
+        self.file = file
+
+    def plot(self, axes, color, alpha):
+        """
+        Plot the data on a mpl axes
+        :param axes: dict of axes object for each component.
+        :param color: str, the color of all lines/scatter points.
+        :param alpha : float
+        """
+        self.x_artists = []
+        self.y_artists = []
+        self.z_artists = []
+
+        count = 10
+
+        for component in self.file.components:
+            rainbow_colors = iter(cm.gist_rainbow(np.linspace(0, 1, len(self.file.ch_times))))
+            comp_data = self.data[self.data.COMPONENT == component]
+
+            ax = axes[component]
+            for ch in [f'CH{num}' for num in range(1, len(self.file.ch_times) + 1)]:
+                c = next(rainbow_colors)  # Cycles through colors
+                x = comp_data.STATION.astype(float)
+                y = comp_data.loc[:, ch].astype(float)
+                if len(x) == 1:
+                    style = 'o'
+                    artist = ax.scatter(x, y,
+                                        color=c,
+                                        marker=style,
+                                        s=count,
+                                        alpha=alpha,
+                                        label=f"{ch} ({self.file.filepath.name})")
+
+                else:
+                    # style = '--' if 'Q' in freq else '-'
+                    artist, = ax.plot(x, y,
+                                      color=c,
+                                      alpha=alpha,
+                                      # lw=count / 1000,
+                                      label=f"{ch} ({self.file.filepath.name})")
+
+                if component == 'X':
+                    self.x_artists.append(artist)
+                elif component == 'Y':
+                    self.y_artists.append(artist)
+                else:
+                    self.z_artists.append(artist)
+
+                count += 10  # For scatter point size
 
 
 class TEMFile:
@@ -42,25 +144,26 @@ class TEMFile:
     def __init__(self):
         self.filepath = None
 
-        self.line = None
-        self.config = 'fixed_loop'
-        self.elevation = 0.
-        self.units = 'nT/s'
-        self.current = 1.
-        self.tx_turns = 1.
-        self.base_freq = 1.
-        self.duty_cycle = 50.
-        self.on_time = 50.
-        self.off_time = 50.
-        self.turn_on = 0.
-        self.turn_off = 0.
-        self.timing_mark = 0.
-        self.rx_area_x = 4000.
-        self.rx_area_y = 4000.
-        self.rx_area_z = 4000.
+        self.line = ''
+        self.config = ''
+        self.elevation = ''
+        self.units = ''
+        self.current = None
+        self.components = []
+        self.tx_turns = None
+        self.base_freq = None
+        self.duty_cycle = None
+        self.on_time = None
+        self.off_time = None
+        self.turn_on = None
+        self.turn_off = None
+        self.timing_mark = None
+        self.rx_area_x = None
+        self.rx_area_y = None
+        self.rx_area_z = None
         self.rx_dipole = False
         self.tx_dipole = False
-        self.loop = None
+        self.tx_moment = None  # Not sure if needed
         self.loop_coords = pd.DataFrame(columns=['Easting', 'Northing', 'Elevation'], dtype=float)
         self.ch_times = []
         self.ch_widths = []
@@ -85,17 +188,20 @@ class TEMFile:
             value = match.split(':')
             header_dict[value[0]] = value[1]
 
-        # Loop name
-        loop = split_content[3].split(':')[1]
+        self.rx_dipole = True if header_dict['RXDIPOLE'] == 'YES' else False
+        self.tx_dipole = True if header_dict['TXDIPOLE'] == 'YES' else False
 
-        # Parse the loop coordinates
-        loop_coords_match = [c for c in split_content if 'LV' in c.upper()]
-        loop_coords = []
-        for match in loop_coords_match:
-            if 'LV' in match:
-                values = [re.search(r'LV\d+\w:(.*)', m).group(1) for m in match.strip().split(' ')]
-                loop_coords.append(values)
-        loop_coords = pd.DataFrame(loop_coords, columns=['Easting', 'Northing', 'Elevation']).astype(float)
+        if not self.tx_dipole:
+            # Parse the loop coordinates
+            loop_coords_match = [c for c in split_content if 'LV' in c.upper()]
+            loop_coords = []
+            for match in loop_coords_match:
+                if 'LV' in match:
+                    values = [re.search(r'LV\d+\w:(.*)', m).group(1) for m in match.strip().split(' ')]
+                    loop_coords.append(values)
+            loop_coords = pd.DataFrame(loop_coords, columns=['Easting', 'Northing', 'Elevation']).astype(float)
+
+            self.loop_coords = loop_coords
 
         global ch_times, cols
         # Channel times and widths
@@ -122,7 +228,7 @@ class TEMFile:
         self.line = header_dict['LINE']
         self.config = header_dict['CONFIG']
         self.elevation = header_dict['ELEV']
-        self.units = header_dict['ELEV']
+        self.units = re.sub('[()]', '', header_dict['UNITS'])
         self.current = header_dict['CURRENT']
         self.tx_turns = header_dict['TXTURNS']
         self.base_freq = header_dict['BFREQ']
@@ -135,13 +241,10 @@ class TEMFile:
         self.rx_area_x = header_dict['RXAREAX']
         self.rx_area_y = header_dict['RXAREAY']
         self.rx_area_z = header_dict['RXAREAZ']
-        self.rx_dipole = header_dict['RXDIPOLE']
-        self.tx_dipole = header_dict['TXDIPOLE']
-        self.loop = loop
-        self.loop_coords = loop_coords
         self.ch_times = ch_times
         self.ch_widths = ch_widths
         self.data = data
+        self.components = self.data.COMPONENT.unique()
         print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
