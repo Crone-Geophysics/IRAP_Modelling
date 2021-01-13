@@ -20,7 +20,7 @@ from src.file_types.platef_file import PlateFFile, PlateFTab
 from src.file_types.mun_file import MUNFile, MUNTab
 from PyQt5 import (QtCore, uic)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
-                             QScrollArea, QSpinBox, QHBoxLayout, QLabel)
+                             QScrollArea, QSpinBox, QHBoxLayout, QLabel, QGroupBox, QCheckBox, QButtonGroup)
 
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
@@ -260,7 +260,9 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
                 else:
                     ax.legend()
             else:
-                ax.get_legend().remove()
+                legend = ax.get_legend()
+                if legend:
+                    legend.remove()
 
             canvas.draw()
             canvas.flush_events()
@@ -342,6 +344,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         # X Figure
         self.x_figure = Figure()
         self.x_ax = self.x_figure.add_subplot(111)
+        self.x_ax.set_title('X Component')
         self.x_ax.set_xlabel("Station")
         self.x_canvas = FigureCanvas(self.x_figure)
 
@@ -353,6 +356,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         # Y Figure
         self.y_figure = Figure()
         self.y_ax = self.y_figure.add_subplot(111)
+        self.y_ax.set_title('Y Component')
         self.y_ax.set_xlabel("Station")
         self.y_canvas = FigureCanvas(self.y_figure)
 
@@ -364,6 +368,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         # Z Figure
         self.z_figure = Figure()
         self.z_ax = self.z_figure.add_subplot(111)
+        self.z_ax.set_title('Z Component')
         self.z_ax.set_xlabel("Station")
         self.z_canvas = FigureCanvas(self.z_figure)
 
@@ -384,14 +389,29 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.alpha_sbox.setValue(100)
 
         self.alpha_frame.layout().addWidget(self.alpha_sbox)
+
+        # Legend option
+        self.legend_box = QFrame()
+        self.legend_box.setLayout(QHBoxLayout())
+        self.color_by_line_cbox = QCheckBox("Color by Line")
+        self.color_by_channel_cbox = QCheckBox("Color by Channel")
+        self.legend_color_group = QButtonGroup()
+        self.legend_color_group.addButton(self.color_by_line_cbox)
+        self.legend_color_group.addButton(self.color_by_channel_cbox)
+        self.legend_box.layout().addWidget(self.color_by_line_cbox)
+        self.legend_box.layout().addWidget(self.color_by_channel_cbox)
+        self.color_by_line_cbox.setChecked(True)
+
+        self.statusBar().addPermanentWidget(self.legend_box)
         self.statusBar().addPermanentWidget(self.alpha_frame)
 
         # Signals
         self.actionOpen.triggered.connect(self.open_file_dialog)
         self.actionPrint_to_PDF.triggered.connect(self.print_pdf)
         self.actionPlot_Legend.triggered.connect(self.update_legend)
+        self.legend_color_group.buttonClicked.connect(lambda: self.plot_tab(self.file_tab_widget.currentIndex()))
 
-        self.file_tab_widget.tabCloseRequested.connect(self.update_tab_plot)
+        self.file_tab_widget.tabCloseRequested.connect(self.remove_tab)
         self.alpha_sbox.valueChanged.connect(self.update_alpha)
 
     def keyPressEvent(self, e):
@@ -484,15 +504,19 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         print(f"Opening {filepath.name}.")
 
+        color = next(quant_colors)  # Cycles through colors
+        # Create a dict for which axes components get plotted on
+        axes = {'X': self.x_ax, 'Y': self.y_ax, 'Z': self.z_ax}
+
         # Create a new tab and add it to the widget
         if ext == '.tem':
-            tab = TEMTab()
+            tab = TEMTab(parent=self, color=color, axes=axes)
         elif ext == '.dat':
             first_line = open(filepath).readlines()[0]
             if 'Data type:' in first_line:
-                tab = MUNTab()
+                tab = MUNTab(parent=self, color=color, axes=axes)
             else:
-                tab = PlateFTab()
+                tab = PlateFTab(parent=self, color=color, axes=axes)
         else:
             tab = None
 
@@ -503,22 +527,29 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             return
 
         # Connect signals
-        tab.show_sig.connect(lambda: self.update_tab_plot(tab))
+        tab.show_sig.connect(self.update_legend)  # Update the legend when the plot is toggled
 
+        # Create a new tab and add a scroll area to it, where the file tab is added to
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setMinimumWidth(250)
         scroll.setWidget(tab)
         self.file_tab_widget.addTab(scroll, filepath.name)
 
-        # TODO Add channel plotting selection
-        # Plot the data from the file
-        alpha = self.alpha_sbox.value() / 100
-        c = next(quant_colors)  # Cycles through colors
+        self.plot_tab(tab)
 
-        # Create a dict for which axes components get plotted on
-        axes = {'X': self.x_ax, 'Y': self.y_ax, 'Z': self.z_ax}
-        tab.plot(axes, c, alpha)
+        self.opened_files.append(filepath)
+
+    def plot_tab(self, tab):
+        # Find the tab when an index is passed (when re-plotting)
+        if isinstance(tab, int):
+            ind = tab
+            tab = self.file_tab_widget.widget(ind).widget()
+
+        # TODO Add channel plotting selection
+        alpha = self.alpha_sbox.value() / 100
+
+        tab.plot(alpha, color_by_channel=self.color_by_channel_cbox.isChecked())
 
         for canvas, ax in zip([self.x_canvas, self.y_canvas, self.z_canvas], [self.x_ax, self.y_ax, self.z_ax]):
             # Add the Y axis label
@@ -534,7 +565,16 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             canvas.flush_events()
 
         self.update_legend()
-        self.opened_files.append(filepath)
+
+    def remove_tab(self, ind):
+        """Remove a tab"""
+        # Find the tab when an index is passed (when a tab is closed)
+        tab = self.file_tab_widget.widget(ind).widget()
+        tab.remove()
+        self.opened_files.pop(ind)
+        self.file_tab_widget.removeTab(ind)
+
+        self.update_legend()
 
     def update_legend(self):
         """Update the legend to be in alphabetical order"""
@@ -572,53 +612,6 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         self.update_legend()
 
-    def update_tab_plot(self, tab):
-        print(f"Updating plot")
-        ind = None
-
-        # Find the tab when an index is passed (when a tab is closed)
-        if isinstance(tab, int):
-            ind = tab
-            tab = self.file_tab_widget.widget(ind).widget()
-            self.opened_files.pop(ind)
-
-        for ax in [self.x_ax, self.y_ax, self.z_ax]:
-            if ax == self.x_ax:
-                artists = tab.x_artists
-            elif ax == self.y_ax:
-                artists = tab.y_artists
-            else:
-                artists = tab.z_artists
-
-            lines = list(filter(lambda x: isinstance(x, matplotlib.lines.Line2D), artists))
-            points = list(filter(lambda x: isinstance(x, matplotlib.collections.PathCollection), artists))  # Scatters
-
-            if lines:
-                if not tab.plot_cbox.isChecked() or ind is not None:
-                    # Add or remove the lines
-                    for artist in artists:
-                        ax.lines.remove(artist)
-                else:
-                    if ind is None:  # Only add lines if the tab isn't being removed
-                        for artist in artists:
-                            ax.lines.append(artist)
-
-            if points:
-                # Add or remove the scatter points
-                if not tab.plot_cbox.isChecked() or ind is not None:
-                    for artist in artists:
-                        ax.collections.remove(artist)
-                else:
-                    if ind is None:  # Only add lines if the tab isn't being removed
-                        for artist in artists:
-                            ax.collections.append(artist)
-
-            if ind is not None:
-                self.file_tab_widget.removeTab(ind)
-
-        # Update the plot
-        self.update_legend()
-
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
@@ -630,7 +623,8 @@ if __name__ == '__main__':
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Test 4 FEM files\Test 4 - h=5m.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Turam 2x4 608S_0.96691A_PFCALC at 1A.fem')
-    tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
+    # tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
+    tem_file = sample_files.joinpath(r'Maxwell files\TEM\50msec Impulse 100S BField.tem')
 
     # fpl = FEMPlotter()
     # fpl.show()

@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+import matplotlib
 from natsort import natsorted
 import pandas as pd
 import numpy as np
@@ -12,9 +13,8 @@ from matplotlib.pyplot import cm
 class TEMTab(QWidget):
     show_sig = QtCore.pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, parent=None, color=None, axes=None):
         super().__init__()
-
         self.layout = QFormLayout()
         self.setLayout(self.layout)
 
@@ -30,10 +30,17 @@ class TEMTab(QWidget):
         # self.layout.addRow("Legend Name", self.legend_name)
 
         self.file = None
+        self.parent = parent
+        self.color = color
+        self.axes = axes
+
         self.x_artists = []
         self.y_artists = []
         self.z_artists = []
         self.data = pd.DataFrame()
+
+        # Signals
+        self.plot_cbox.toggled.connect(self.toggle)
 
     def read(self, filepath):
         if not isinstance(filepath, Path):
@@ -87,26 +94,42 @@ class TEMTab(QWidget):
         self.data = file.data
         self.file = file
 
-    def plot(self, axes, color, alpha):
+    def plot(self, alpha, color_by_channel=False):
         """
         Plot the data on a mpl axes
-        :param axes: dict of axes object for each component.
-        :param color: str, the color of all lines/scatter points.
         :param alpha : float
+        :param color_by_channel: bool, color each channel a different color or color each line with self.color.
         """
+        # Remove existing plotted lines
+        self.remove()
+
         self.x_artists = []
         self.y_artists = []
         self.z_artists = []
 
-        count = 10
-
         for component in self.file.components:
-            rainbow_colors = iter(cm.gist_rainbow(np.linspace(0, 1, len(self.file.ch_times))))
+            print(f"Plotting {component} component.")
             comp_data = self.data[self.data.COMPONENT == component]
+            size = 8  # For scatter point size
 
-            ax = axes[component]
-            for ch in [f'CH{num}' for num in range(1, len(self.file.ch_times) + 1)]:
-                c = next(rainbow_colors)  # Cycles through colors
+            if color_by_channel is True:
+                rainbow_color = iter(cm.gist_rainbow(np.linspace(0, 1, len(self.file.ch_times))))
+
+            ax = self.axes[component]
+            for ind, ch in enumerate([f'CH{num}' for num in range(1, len(self.file.ch_times) + 1)]):
+
+                # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
+                if color_by_channel is True:
+                    c = next(rainbow_color)  # Cycles through colors
+                    label = f"{ch}"
+                # If coloring by line, uses the tab's color, and the label is the file name.
+                else:
+                    c = self.color
+                    if ind == 0:
+                        label = f"{self.file.filepath.name}"
+                    else:
+                        label = None
+
                 x = comp_data.STATION.astype(float)
                 y = comp_data.loc[:, ch].astype(float)
                 if len(x) == 1:
@@ -114,17 +137,17 @@ class TEMTab(QWidget):
                     artist = ax.scatter(x, y,
                                         color=c,
                                         marker=style,
-                                        s=count,
+                                        s=size,
                                         alpha=alpha,
-                                        label=f"{ch} ({self.file.filepath.name})")
+                                        label=label)
 
                 else:
                     # style = '--' if 'Q' in freq else '-'
                     artist, = ax.plot(x, y,
                                       color=c,
                                       alpha=alpha,
-                                      # lw=count / 1000,
-                                      label=f"{ch} ({self.file.filepath.name})")
+                                      # lw=count / 100,
+                                      label=label)
 
                 if component == 'X':
                     self.x_artists.append(artist)
@@ -133,7 +156,51 @@ class TEMTab(QWidget):
                 else:
                     self.z_artists.append(artist)
 
-                count += 10  # For scatter point size
+                size += 2
+
+    def remove(self):
+        # Remove existing plotted lines
+        for ls, ax in zip([self.x_artists, self.y_artists, self.z_artists], self.axes.values()):
+            if ax.lines:
+                if all([artist in ax.lines for artist in ls]):
+                    for artist in ls:
+                        ax.lines.remove(artist)
+            if ax.collections:
+                if all([artist in ax.collections for artist in ls]):
+                    for artist in ls:
+                        ax.collections.remove(artist)
+
+    # TODO get toggle working correctly
+    def toggle(self):
+        """Toggle the visibility of plotted lines/points"""
+        for ax in self.axes.values():
+            if ax == self.axes['X']:
+                artists = self.x_artists
+            elif ax == self.axes['Y']:
+                artists = self.y_artists
+            else:
+                artists = self.z_artists
+
+            lines = list(filter(lambda x: isinstance(x, matplotlib.lines.Line2D), artists))
+            points = list(filter(lambda x: isinstance(x, matplotlib.collections.PathCollection), artists))  # Scatters
+
+            if lines:
+                if not self.plot_cbox.isChecked():
+                    # Add or remove the lines
+                    for artist in artists:
+                        ax.lines.remove(artist)
+                else:
+                    for artist in artists:
+                        ax.lines.append(artist)
+
+            if points:
+                # Add or remove the scatter points
+                if not self.plot_cbox.isChecked():
+                    for artist in artists:
+                        ax.collections.remove(artist)
+                else:
+                    for artist in artists:
+                        ax.collections.append(artist)
 
 
 class TEMFile:
