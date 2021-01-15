@@ -5,13 +5,13 @@ import matplotlib
 from natsort import natsorted
 import pandas as pd
 import numpy as np
-from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox)
+from PyQt5 import QtCore, QtGui
+from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox, QFrame, QHBoxLayout, QSpinBox, QSizePolicy)
 from matplotlib.pyplot import cm
 
 
 class TEMTab(QWidget):
-    show_sig = QtCore.pyqtSignal()
+    toggle_sig = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, color=None, axes=None):
         super().__init__()
@@ -21,17 +21,29 @@ class TEMTab(QWidget):
         self.plot_cbox = QCheckBox("Plot")
         self.plot_cbox.setFocusPolicy(QtCore.Qt.NoFocus)
         self.plot_cbox.setChecked(True)
-        self.plot_cbox.toggled.connect(lambda: self.show_sig.emit())
 
         self.layout.addRow(self.plot_cbox)
         self.layout.addRow("File Type", QLabel("Maxwell TEM"))
 
-        # self.legend_name = QLineEdit()
-        # self.layout.addRow("Legend Name", self.legend_name)
+        # Channel selection frame
+        self.ch_select_frame = QFrame()
+        self.ch_select_frame.setLayout(QHBoxLayout())
+        self.ch_select_frame.layout().setContentsMargins(0, 0, 0, 0)
+        self.ch_select_frame.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.min_ch = QSpinBox()
+        self.max_ch = QSpinBox()
+        self.min_ch.setMinimum(1)
+        self.max_ch.setMinimum(1)
+        self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
+        self.ch_select_frame.layout().addWidget(self.min_ch)
+        self.ch_select_frame.layout().addWidget(QLabel("to"))
+        self.ch_select_frame.layout().addWidget(self.max_ch)
 
         self.file = None
         self.parent = parent
         self.color = color
+        self.alpha = None  # Remember the last alpha
+        self.color_by_channel = False
         self.axes = axes
 
         self.x_artists = []
@@ -41,6 +53,8 @@ class TEMTab(QWidget):
 
         # Signals
         self.plot_cbox.toggled.connect(self.toggle)
+        self.min_ch.valueChanged.connect(lambda: self.update_channels("min"))
+        self.max_ch.valueChanged.connect(lambda: self.update_channels("max"))
 
     def read(self, filepath):
         if not isinstance(filepath, Path):
@@ -83,10 +97,25 @@ class TEMTab(QWidget):
         else:
             self.layout.addRow('Tx Turns', QLabel(str(file.tx_turns)))
 
+        if file.components:
+            self.layout.addRow('Components', QLabel('\n'.join(natsorted(file.components))))
+
+        self.layout.addRow(self.ch_select_frame)
         # Create a data frame with channel times and channel widths
         channel_times = pd.DataFrame(zip(file.ch_times, file.ch_widths),
                                      columns=['Times', 'Widths'])
+        channel_times.index += 1
         self.layout.addRow('Channel Times', QLabel(channel_times.to_string()))
+
+        # Set the channel range spin boxes
+        self.min_ch.blockSignals(True)
+        self.max_ch.blockSignals(True)
+        self.min_ch.setValue(1)
+        self.max_ch.setValue(len(channel_times))
+        self.min_ch.setMaximum(len(channel_times))
+        self.max_ch.setMaximum(len(channel_times))
+        self.min_ch.blockSignals(False)
+        self.max_ch.blockSignals(False)
 
         if not file.loop_coords.empty:
             self.layout.addRow('Loop Coordinates', QLabel(file.loop_coords.to_string()))
@@ -94,30 +123,49 @@ class TEMTab(QWidget):
         self.data = file.data
         self.file = file
 
-    def plot(self, alpha, color_by_channel=False):
+    def plot(self, alpha=None, color_by_channel=None):
         """
         Plot the data on a mpl axes
-        :param alpha : float
+        :param alpha: float
         :param color_by_channel: bool, color each channel a different color or color each line with self.color.
         """
         # Remove existing plotted lines
         self.remove()
 
+        # Use the current alpha is none is passed
+        if alpha is None:
+            alpha = self.alpha
+        else:
+            self.alpha = alpha
+
+        # Use the current legend coloring if none is passed
+        if color_by_channel is None:
+            color_by_channel = self.color_by_channel
+        else:
+            self.color_by_channel = color_by_channel
+
         self.x_artists = []
         self.y_artists = []
         self.z_artists = []
 
+        channels = [f'CH{num}' for num in range(1, len(self.file.ch_times) + 1)]
+        plotting_channels = channels[self.min_ch.value() - 1: self.max_ch.value()]
+
         for component in self.file.components:
-            print(f"Plotting {component} component.")
             comp_data = self.data[self.data.COMPONENT == component]
+
+            if comp_data.empty:
+                print(f"No {component} data in {self.file.filepath.name}.")
+                continue
+
             size = 8  # For scatter point size
 
             if color_by_channel is True:
-                rainbow_color = iter(cm.gist_rainbow(np.linspace(0, 1, len(self.file.ch_times))))
+                rainbow_color = iter(cm.gist_rainbow(np.linspace(0, 1, len(plotting_channels))))
 
             ax = self.axes[component]
-            for ind, ch in enumerate([f'CH{num}' for num in range(1, len(self.file.ch_times) + 1)]):
 
+            for ind, ch in enumerate(plotting_channels):
                 # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
                 if color_by_channel is True:
                     c = next(rainbow_color)  # Cycles through colors
@@ -132,6 +180,7 @@ class TEMTab(QWidget):
 
                 x = comp_data.STATION.astype(float)
                 y = comp_data.loc[:, ch].astype(float)
+
                 if len(x) == 1:
                     style = 'o'
                     artist = ax.scatter(x, y,
@@ -170,7 +219,6 @@ class TEMTab(QWidget):
                     for artist in ls:
                         ax.collections.remove(artist)
 
-    # TODO get toggle working correctly
     def toggle(self):
         """Toggle the visibility of plotted lines/points"""
         for ax in self.axes.values():
@@ -185,22 +233,54 @@ class TEMTab(QWidget):
             points = list(filter(lambda x: isinstance(x, matplotlib.collections.PathCollection), artists))  # Scatters
 
             if lines:
-                if not self.plot_cbox.isChecked():
-                    # Add or remove the lines
-                    for artist in artists:
-                        ax.lines.remove(artist)
+                if self.plot_cbox.isChecked():
+                    if all([a in ax.lines for a in lines]):  # If the lines are already plotted, pass.
+                        pass
+                    else:
+                        for artist in artists:
+                            ax.lines.append(artist)
                 else:
                     for artist in artists:
-                        ax.lines.append(artist)
+                        ax.lines.remove(artist)
 
             if points:
                 # Add or remove the scatter points
-                if not self.plot_cbox.isChecked():
-                    for artist in artists:
-                        ax.collections.remove(artist)
+                if self.plot_cbox.isChecked():
+                    if all([a in ax.collections for a in points]):  # If the points are already plotted, pass.
+                        pass
+                    else:
+                        for artist in artists:
+                            ax.collections.append(artist)
                 else:
                     for artist in artists:
-                        ax.collections.append(artist)
+                        ax.collections.remove(artist)
+
+        self.toggle_sig.emit()
+
+    def update_channels(self, which):
+        """
+        Change the plotted channel range
+        :param which: str, which channel extreme was changed, min or max
+        """
+        self.min_ch.blockSignals(True)
+        self.max_ch.blockSignals(True)
+
+        min_ch = self.min_ch.value()
+        max_ch = self.max_ch.value()
+
+        if which == 'min':
+            if min_ch > max_ch:
+                self.max_ch.setValue(min_ch)
+
+        else:
+            if max_ch < min_ch:
+                self.min_ch.setValue(max_ch)
+
+        self.plot(alpha=None, color_by_channel=None)
+        self.toggle_sig.emit()  # Updates the legend and re-draws
+
+        self.min_ch.blockSignals(False)
+        self.max_ch.blockSignals(False)
 
 
 class TEMFile:
@@ -267,10 +347,10 @@ class TEMFile:
                     values = [re.search(r'LV\d+\w:(.*)', m).group(1) for m in match.strip().split(' ')]
                     loop_coords.append(values)
             loop_coords = pd.DataFrame(loop_coords, columns=['Easting', 'Northing', 'Elevation']).astype(float)
+            loop_coords.index += 1
 
             self.loop_coords = loop_coords
 
-        global ch_times, cols
         # Channel times and widths
         ch_times = content.split(r'/TIMES(')[1].split('\n')[0][4:].split(',')
         ch_widths = content.split(r'/TIMESWIDTH(')[1].split('\n')[0][4:].split(',')
@@ -279,12 +359,6 @@ class TEMFile:
         top_section, data_section = content.split(r'/PROFILEX:')
         data_columns = top_section.split('\n')[-2].split()
         data_match = data_section.split('\n')[1:]
-        # data_match = content.split(r'/PROFILEX:')[1].split('\n')[1:]
-        # Headers that are always there (?)
-        # cols = ['Easting', 'Northing', 'Elevation', 'Station', 'Component', 'Dircosz', 'Dircose', 'Dircosn']
-        # Add the channel numbers as column names
-        # cols.extend(np.arange(0, len(ch_times)).astype(str))
-        # cols.extend(['Distance', 'Calc_this'])
         data = pd.DataFrame([match.split() for match in data_match[:-1]], columns=data_columns)
         data.iloc[:, 0:3] = data.iloc[:, 0:3].astype(float)
         data.iloc[:, 3] = data.iloc[:, 3].astype(float).astype(int)
@@ -311,7 +385,7 @@ class TEMFile:
         self.ch_times = ch_times
         self.ch_widths = ch_widths
         self.data = data
-        self.components = self.data.COMPONENT.unique()
+        self.components = list(self.data.COMPONENT.unique())
         print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 

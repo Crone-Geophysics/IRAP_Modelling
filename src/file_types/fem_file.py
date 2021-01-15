@@ -3,14 +3,16 @@ from pathlib import Path
 
 from natsort import natsorted
 import pandas as pd
+import matplotlib
+import numpy as np
 from PyQt5 import QtCore
 from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox)
 
 
 class FEMTab(QWidget):
-    show_sig = QtCore.pyqtSignal()
+    toggle_sig = QtCore.pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, parent=None, color=None, axes=None):
         super().__init__()
 
         self.layout = QFormLayout()
@@ -19,18 +21,22 @@ class FEMTab(QWidget):
         self.plot_cbox = QCheckBox("Plot")
         self.plot_cbox.setFocusPolicy(QtCore.Qt.NoFocus)
         self.plot_cbox.setChecked(True)
-        self.plot_cbox.toggled.connect(lambda: self.show_sig.emit())
 
         self.layout.addRow(self.plot_cbox)
         self.layout.addRow("File Type", QLabel("Maxwell FEM"))
 
-        # self.legend_name = QLineEdit()
-        # self.layout.addRow("Legend Name", self.legend_name)
-
         self.file = None
+        self.parent = parent
+        self.color = color
+        self.alpha = None  # Remember the last alpha
+        self.axes = axes
+
         self.hcp_artists = []
         self.vca_artists = []
         self.data = pd.DataFrame()
+
+        # Signals
+        self.plot_cbox.toggled.connect(self.toggle)
 
     def read(self, filepath):
         if not isinstance(filepath, Path):
@@ -51,7 +57,6 @@ class FEMTab(QWidget):
             raise ValueError(F"No data found in {filepath.name}.")
 
         # Add the file name as the default for the name in the legend
-        # self.legend_name.setText(filepath.name)
         self.layout.addRow('Line', QLabel(file.line))
         self.layout.addRow('Configuration', QLabel(file.config))
         self.layout.addRow('Elevation', QLabel(str(file.elevation)))
@@ -60,12 +65,10 @@ class FEMTab(QWidget):
 
         self.layout.addRow('Rx Dipole', QLabel(str(file.rx_dipole)))
 
-        if file.rx_dipole:
+        if file.rx_area_hcp:
             self.layout.addRow('Rx Area (HCP)', QLabel(file.rx_area_hcp))
-        else:
-            self.layout.addRow('Rx Area X', QLabel(str(file.rx_area_x)))
-            self.layout.addRow('Rx Area Y', QLabel(str(file.rx_area_y)))
-            self.layout.addRow('Rx Area Z', QLabel(str(file.rx_area_z)))
+        if file.rx_area_vca:
+            self.layout.addRow('Rx Area (VCA)', QLabel(file.rx_area_vca))
 
         self.layout.addRow('Tx Dipole', QLabel(str(file.tx_dipole)))
         if file.tx_dipole:
@@ -81,7 +84,7 @@ class FEMTab(QWidget):
             self.layout.addRow('Frequencies', QLabel('\n'.join(natsorted(file.frequencies))))
 
         if file.components:
-            self.layout.addRow('Components', QLabel('\n'.join(natsorted(file.components))))
+            self.layout.addRow('Components', QLabel('\n'.join(natsorted(np.unique(file.components)))))
 
         if not file.loop_coords.empty:
             self.layout.addRow('Loop Coordinates', QLabel(file.loop_coords.to_string()))
@@ -89,52 +92,45 @@ class FEMTab(QWidget):
         self.data = file.data
         self.file = file
 
-    def plot(self, axes, color, alpha):
+    def plot(self, alpha=None):
         """
         Plot the data on a mpl axes
-        :param axes: dict of axes object for each component.
-        :param color: str, the color of all lines/scatter points.
         :param alpha : float
         """
+        # Remove existing plotted lines
+        self.remove()
+
+        # Use the current alpha is none is passed
+        if alpha is None:
+            alpha = self.alpha
+        else:
+            self.alpha = alpha
+
         self.hcp_artists = []
         self.vca_artists = []
-        count = 10
+        size = 10
 
-        for component in self.file.components:
-            print(f"Plotting {component} component.")
+        # When there's component-by-frequency
+        if self.file.comp_by_freq:
 
-            # Filter the data by component. If component-by-frequency is active,
-            # find the index of that component and use that to find the frequency.
-            if self.file.comp_by_freq is True:
-                ind = self.file.components.index(component)
-                freq = self.file.frequencies[ind]
+            for freq, component in self.file.comp_by_freq.items():
+                print(f"Plotting frequency {freq}")
                 comp_data = self.data.loc[:, ['STATION', freq]]
-            else:
-                comp_data = self.data[self.data.COMPONENT == component]
 
-            if comp_data.empty:
-                print(f"No {component} data in {self.file.filepath.name}.")
-                continue
-
-            ax = axes[component]
-            # Easiest to cycle through all frequencies, and simply not plot if there's a
-            # frequency not available in a certain component.
-            # This is mainly a problem caused by component-by-frequency.
-            for freq in self.file.frequencies:
-
-                if freq not in comp_data.columns:
-                    print(f"{freq} is not available in {component}.")
+                if comp_data.empty:
+                    print(f"No data for component {component} and frequency {freq}.")
                     continue
 
+                ax = self.axes[component]
                 x = comp_data.STATION.astype(float)
                 y = comp_data.loc[:, freq].astype(float)
 
                 if len(x) == 1:
                     style = 'x' if 'Q' in freq else 'o'
                     artist = ax.scatter(x, y,
-                                        color=color,
+                                        color=self.color,
                                         marker=style,
-                                        s=count,
+                                        s=size,
                                         alpha=alpha,
                                         label=f"{freq} ({self.file.filepath.name})")
 
@@ -142,7 +138,7 @@ class FEMTab(QWidget):
                     style = '--' if 'Q' in freq else '-'
                     artist, = ax.plot(x, y,
                                       ls=style,
-                                      color=color,
+                                      color=self.color,
                                       alpha=alpha,
                                       label=f"{freq} ({self.file.filepath.name})")
 
@@ -151,7 +147,96 @@ class FEMTab(QWidget):
                 else:
                     self.vca_artists.append(artist)
 
-                count += 10  # For scatter point size
+                size += 10  # For scatter point size
+
+        else:
+            for freq in self.file.frequencies:
+                print(f"Plotting {freq} frequency.")
+
+                for component in self.file.components:
+                    print(f"Plotting component {component}.")
+                    ax = self.axes[component]
+
+                    comp_data = self.data[self.data.COMPONENT == component]
+
+                    if comp_data.empty:
+                        print(f"No data for component {component} and frequency {freq}.")
+                        continue
+
+                    x = comp_data.STATION.astype(float)
+                    y = comp_data.loc[:, freq].astype(float)
+
+                    if len(x) == 1:
+                        style = 'x' if 'Q' in freq else 'o'
+                        artist = ax.scatter(x, y,
+                                            color=self.color,
+                                            marker=style,
+                                            s=size,
+                                            alpha=alpha,
+                                            label=f"{freq} ({self.file.filepath.name})")
+
+                    else:
+                        style = '--' if 'Q' in freq else '-'
+                        artist, = ax.plot(x, y,
+                                          ls=style,
+                                          color=self.color,
+                                          alpha=alpha,
+                                          label=f"{freq} ({self.file.filepath.name})")
+
+                    if component == 'HCP':
+                        self.hcp_artists.append(artist)
+                    else:
+                        self.vca_artists.append(artist)
+
+                    size += 10  # For scatter point size
+
+    def remove(self):
+        # Remove existing plotted lines
+        for ls, ax in zip([self.hcp_artists, self.vca_artists], self.axes.values()):
+            if ax.lines:
+                if all([artist in ax.lines for artist in ls]):
+                    for artist in ls:
+                        ax.lines.remove(artist)
+            if ax.collections:
+                if all([artist in ax.collections for artist in ls]):
+                    for artist in ls:
+                        ax.collections.remove(artist)
+
+    def toggle(self):
+        """Toggle the visibility of plotted lines/points"""
+        for ax in self.axes.values():
+            if ax == self.axes['HCP']:
+                artists = self.hcp_artists
+            else:
+                artists = self.vca_artists
+
+            lines = list(filter(lambda x: isinstance(x, matplotlib.lines.Line2D), artists))
+            points = list(filter(lambda x: isinstance(x, matplotlib.collections.PathCollection), artists))  # Scatters
+
+            if lines:
+                if self.plot_cbox.isChecked():
+                    if all([a in ax.lines for a in lines]):  # If the lines are already plotted, pass.
+                        pass
+                    else:
+                        for artist in artists:
+                            ax.lines.append(artist)
+                else:
+                    for artist in artists:
+                        ax.lines.remove(artist)
+
+            if points:
+                # Add or remove the scatter points
+                if self.plot_cbox.isChecked():
+                    if all([a in ax.collections for a in points]):  # If the points are already plotted, pass.
+                        pass
+                    else:
+                        for artist in artists:
+                            ax.collections.append(artist)
+                else:
+                    for artist in artists:
+                        ax.collections.remove(artist)
+
+        self.toggle_sig.emit()
 
 
 class FEMFile:
@@ -173,6 +258,7 @@ class FEMFile:
         self.h_sep = None
         self.v_sep = None
         self.rx_area_hcp = None
+        self.rx_area_vca = None
         self.rx_area_x = None
         self.rx_area_y = None
         self.rx_area_z = None
@@ -180,7 +266,7 @@ class FEMFile:
         self.tx_dipole = False
 
         self.frequencies = []
-        self.comp_by_freq = False
+        self.comp_by_freq = {}
         self.loop_coords = pd.DataFrame()
         self.data = pd.DataFrame()
 
@@ -218,6 +304,7 @@ class FEMFile:
                     values = [re.search(r'LV\d+\w:(.*)', m).group(1) for m in match.strip().split(' ')]
                     loop_coords.append(values)
             loop_coords = pd.DataFrame(loop_coords, columns=['Easting', 'Northing', 'Elevation']).astype(float)
+            loop_coords.index += 1
 
             self.loop_coords = loop_coords
 
@@ -240,12 +327,18 @@ class FEMFile:
         self.current = header_dict['CURRENT']
 
         if self.rx_dipole:
-            self.rx_area_hcp = header_dict['RXAREAHCP']
+            if 'RXAREAHCP' in header_dict.keys():
+                self.rx_area_hcp = header_dict['RXAREAHCP']
+            if 'RXAREAVCA' in header_dict.keys():
+                self.rx_area_vca = header_dict['RXAREAVCA']
         else:
             # TODO See if there's RX Area when RX is not dipole
-            self.rx_area_x = header_dict['RXAREAX']
-            self.rx_area_y = header_dict['RXAREAY']
-            self.rx_area_z = header_dict['RXAREAZ']
+            if 'RXAREAX' in header_dict.keys():
+                self.rx_area_x = header_dict['RXAREAX']
+            if 'RXAREAY' in header_dict.keys():
+                self.rx_area_y = header_dict['RXAREAY']
+            if 'RXAREAZ' in header_dict.keys():
+                self.rx_area_z = header_dict['RXAREAZ']
 
         if self.tx_dipole:
             self.tx_moment = header_dict['TXMOMENT']
@@ -270,11 +363,11 @@ class FEMFile:
                 data['COMPONENT'] = component
                 self.components = [component]
             else:
-                self.comp_by_freq = True
+                self.comp_by_freq = dict(zip(frequencies, components))
                 self.components = components
                 data['COMPONENT'] = ', '.join(components)
         else:
-            self.components = data.COMPONENT.unique()
+            self.components = list(data.COMPONENT.unique())
         self.data = data
 
         print(f"Parsed data from {self.filepath.name}:\n{data}")

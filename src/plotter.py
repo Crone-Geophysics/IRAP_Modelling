@@ -61,6 +61,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         self.hcp_figure = Figure()
         self.hcp_ax = self.hcp_figure.add_subplot(111)
         self.hcp_ax.set_xlabel("Station")
+        self.hcp_ax.set_title("HCP Component")
         self.hcp_canvas = FigureCanvas(self.hcp_figure)
 
         toolbar = NavigationToolbar(self.hcp_canvas, self)
@@ -72,6 +73,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         self.vca_figure = Figure()
         self.vca_ax = self.vca_figure.add_subplot(111)
         self.vca_ax.set_xlabel("Station")
+        self.vca_ax.set_title("VCA Component")
         self.vca_canvas = FigureCanvas(self.vca_figure)
 
         toolbar = NavigationToolbar(self.vca_canvas, self)
@@ -98,22 +100,19 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         self.actionPrint_to_PDF.triggered.connect(self.print_pdf)
         self.actionPlot_Legend.triggered.connect(self.update_legend)
 
-        self.file_tab_widget.tabCloseRequested.connect(self.update_tab_plot)
+        self.file_tab_widget.tabCloseRequested.connect(self.remove_tab)
         self.alpha_sbox.valueChanged.connect(self.update_alpha)
+
+        self.update_num_files()
 
     def keyPressEvent(self, e):
         if e.key() == QtCore.Qt.Key_Space:
-            self.hcp_ax.relim()
-            self.hcp_ax.autoscale()
+            for canvas, ax in zip([self.hcp_canvas, self.vca_canvas], [self.hcp_ax, self.vca_ax]):
+                ax.relim()
+                ax.autoscale()
 
-            self.hcp_canvas.draw()
-            self.hcp_canvas.flush_events()
-
-            self.vca_ax.relim()
-            self.vca_ax.autoscale()
-
-            self.vca_canvas.draw()
-            self.vca_canvas.flush_events()
+                canvas.draw()
+                canvas.flush_events()
 
     def dragEnterEvent(self, e):
         e.accept()
@@ -124,7 +123,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         :param e: PyQT event
         """
         urls = [url.toLocalFile() for url in e.mimeData().urls()]
-        if all([Path(file).suffix.lower() in ['.dat', '.tem', '.fem'] for file in urls]):
+        if all([Path(file).suffix.lower() in ['.fem'] for file in urls]):
             e.acceptProposedAction()
             return
         else:
@@ -182,7 +181,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         filepath = Path(filepath)
         ext = filepath.suffix.lower()
 
-        if ext not in ['.tem', '.fem', '.dat']:
+        if ext not in ['.fem']:
             self.msg.showMessage(self, 'Error', f"{ext[1:]} is not an implemented file extension.")
             print(f"{ext} is not supported.")
             return
@@ -193,42 +192,51 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
 
         print(f"Opening {filepath.name}.")
 
+        try:
+            color = next(quant_colors)  # Cycles through colors
+        except StopIteration:
+            self.msg.showMessage(self, "Error", "Maximum number of files reached.")
+            return
+
+        # Create a dict for which axes components get plotted on
+        axes = {'HCP': self.hcp_ax, 'VCA': self.vca_ax}
+
         # Create a new tab and add it to the widget
-        if ext == '.tem':
-            tab = TEMTab()
-        elif ext == '.fem':
-            tab = FEMTab()
-        elif ext == '.dat':
-            first_line = open(filepath).readlines()[0]
-            if 'Data type:' in first_line:
-                tab = MUNTab()
-            else:
-                tab = PlateFTab()
+        if ext == '.fem':
+            tab = FEMTab(parent=self, color=color, axes=axes)
         else:
             tab = None
 
-        try:
-            tab.read(filepath)
-        except Exception as e:
-            self.err_msg.showMessage(str(e))
-            return
+        # try:
+        tab.read(filepath)
+        # except Exception as e:
+        #     self.err_msg.showMessage(str(e))
+        #     return
 
         # Connect signals
-        tab.show_sig.connect(lambda: self.update_tab_plot(tab))
+        tab.toggle_sig.connect(self.update_legend)
 
+        # Create a new tab and add a scroll area to it, where the file tab is added to
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setMinimumWidth(250)
         scroll.setWidget(tab)
         self.file_tab_widget.addTab(scroll, filepath.name)
 
-        # Plot the data from the file
-        alpha = self.alpha_sbox.value() / 100
-        c = next(quant_colors)  # Cycles through colors
+        self.plot_tab(tab)
 
-        # Create a dict for which axes components get plotted on
-        axes = {'HCP': self.hcp_ax, 'VCA': self.vca_ax}
-        tab.plot(axes, c, alpha)
+        self.opened_files.append(filepath)
+        self.update_num_files()
+
+    def plot_tab(self, tab):
+        # Find the tab when an index is passed (when re-plotting)
+        if isinstance(tab, int):
+            ind = tab
+            tab = self.file_tab_widget.widget(ind).widget()
+
+        alpha = self.alpha_sbox.value() / 100
+
+        tab.plot(alpha)
 
         for canvas, ax in zip([self.hcp_canvas, self.vca_canvas], [self.hcp_ax, self.vca_ax]):
             # Add the Y axis label
@@ -236,15 +244,26 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
                 ax.set_ylabel(tab.file.units)
             else:
                 if ax.get_ylabel() != tab.file.units:
-                    self.msg.warning(self, "Warning", f"The units for {tab.file.filepath.name} are"
-                                                      f" different then the prior units.")
+                    print(f"Warning: The units for {tab.file.filepath.name} are different then the prior units.")
+                    # self.msg.warning(self, "Warning", f"The units for {tab.file.filepath.name} are"
+                    #                                   f" different then the prior units.")
 
             # Update the plot
             canvas.draw()
             canvas.flush_events()
+
         self.update_legend()
 
-        self.opened_files.append(filepath)
+    def remove_tab(self, ind):
+        """Remove a tab"""
+        # Find the tab when an index is passed (when a tab is closed)
+        tab = self.file_tab_widget.widget(ind).widget()
+        tab.remove()
+        self.opened_files.pop(ind)
+        self.file_tab_widget.removeTab(ind)
+
+        self.update_legend()
+        self.update_num_files()
 
     def update_legend(self):
         """Update the legend to be in alphabetical order"""
@@ -282,50 +301,8 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
 
         self.update_legend()
 
-    def update_tab_plot(self, tab):
-        print(f"Updating plot")
-        ind = None
-
-        # Find the tab when an index is passed (when a tab is closed)
-        if isinstance(tab, int):
-            ind = tab
-            tab = self.file_tab_widget.widget(ind).widget()
-            self.opened_files.pop(ind)
-
-        for ax in [self.hcp_ax, self.vca_ax]:
-            if ax == self.hcp_ax:
-                artists = tab.hcp_artists
-            else:
-                artists = tab.vca_artists
-
-            lines = list(filter(lambda x: isinstance(x, matplotlib.lines.Line2D), artists))
-            points = list(filter(lambda x: isinstance(x, matplotlib.collections.PathCollection), artists))  # Scatters
-
-            if lines:
-                if not tab.plot_cbox.isChecked() or ind is not None:
-                    # Add or remove the lines
-                    for artist in artists:
-                        ax.lines.remove(artist)
-                else:
-                    if ind is None:  # Only add lines if the tab isn't being removed
-                        for artist in artists:
-                            ax.lines.append(artist)
-
-            if points:
-                # Add or remove the scatter points
-                if not tab.plot_cbox.isChecked() or ind is not None:
-                    for artist in artists:
-                        ax.collections.remove(artist)
-                else:
-                    if ind is None:  # Only add lines if the tab isn't being removed
-                        for artist in artists:
-                            ax.collections.append(artist)
-
-            if ind is not None:
-                self.file_tab_widget.removeTab(ind)
-
-        # Update the plot
-        self.update_legend()
+    def update_num_files(self):
+        self.statusBar().showMessage(f"{len(self.opened_files)} file(s) opened.")
 
 
 class TEMPlotter(QMainWindow, tem_plotterUI):
@@ -413,6 +390,8 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         self.file_tab_widget.tabCloseRequested.connect(self.remove_tab)
         self.alpha_sbox.valueChanged.connect(self.update_alpha)
+
+        self.update_num_files()
 
     def keyPressEvent(self, e):
         if e.key() == QtCore.Qt.Key_Space:
@@ -504,7 +483,12 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         print(f"Opening {filepath.name}.")
 
-        color = next(quant_colors)  # Cycles through colors
+        try:
+            color = next(quant_colors)  # Cycles through colors
+        except StopIteration:
+            self.msg.showMessage(self, "Error", "Maximum number of files reached.")
+            return
+
         # Create a dict for which axes components get plotted on
         axes = {'X': self.x_ax, 'Y': self.y_ax, 'Z': self.z_ax}
 
@@ -520,14 +504,14 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         else:
             tab = None
 
-        try:
-            tab.read(filepath)
-        except Exception as e:
-            self.err_msg.showMessage(str(e))
-            return
+        # try:
+        tab.read(filepath)
+        # except Exception as e:
+        #     self.err_msg.showMessage(str(e))
+        #     return
 
         # Connect signals
-        tab.show_sig.connect(self.update_legend)  # Update the legend when the plot is toggled
+        tab.toggle_sig.connect(self.update_legend)  # Update the legend when the plot is toggled
 
         # Create a new tab and add a scroll area to it, where the file tab is added to
         scroll = QScrollArea()
@@ -539,6 +523,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.plot_tab(tab)
 
         self.opened_files.append(filepath)
+        self.update_num_files()
 
     def plot_tab(self, tab):
         # Find the tab when an index is passed (when re-plotting)
@@ -546,7 +531,6 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             ind = tab
             tab = self.file_tab_widget.widget(ind).widget()
 
-        # TODO Add channel plotting selection
         alpha = self.alpha_sbox.value() / 100
 
         tab.plot(alpha, color_by_channel=self.color_by_channel_cbox.isChecked())
@@ -557,8 +541,9 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
                 ax.set_ylabel(tab.file.units)
             else:
                 if ax.get_ylabel() != tab.file.units:
-                    self.msg.warning(self, "Warning", f"The units for {tab.file.filepath.name} are"
-                                                      f" different then the prior units.")
+                    print(f"Warning: The units for {tab.file.filepath.name} are different then the prior units.")
+                #     self.msg.warning(self, "Warning", f"The units for {tab.file.filepath.name} are"
+                #                                       f" different then the prior units.")
 
             # Update the plot
             canvas.draw()
@@ -575,6 +560,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.file_tab_widget.removeTab(ind)
 
         self.update_legend()
+        self.update_num_files()
 
     def update_legend(self):
         """Update the legend to be in alphabetical order"""
@@ -612,6 +598,9 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         self.update_legend()
 
+    def update_num_files(self):
+        self.statusBar().showMessage(f"{len(self.opened_files)} file(s) opened.")
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
@@ -622,16 +611,17 @@ if __name__ == '__main__':
     # platef_file = sample_files.joinpath(r'PLATEF files\450_50.dat')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Test 4 FEM files\Test 4 - h=5m.fem')
-    # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Turam 2x4 608S_0.96691A_PFCALC at 1A.fem')
-    # tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
-    tem_file = sample_files.joinpath(r'Maxwell files\TEM\50msec Impulse 100S BField.tem')
+    fem_file = sample_files.joinpath(r'Maxwell files\FEM\Turam 2x4 608S_0.96691A_PFCALC at 1A.fem')
+    # fem_file = sample_files.joinpath(r'Maxwell files\FEM\test Z.fem')
+    tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
+    # tem_file = sample_files.joinpath(r'Maxwell files\TEM\50msec Impulse 100S BField.tem')
 
-    # fpl = FEMPlotter()
-    # fpl.show()
-    # fpl.open(fem_file)
+    fpl = FEMPlotter()
+    fpl.show()
+    fpl.open(fem_file)
 
-    tpl = TEMPlotter()
-    tpl.show()
-    tpl.open(tem_file)
+    # tpl = TEMPlotter()
+    # tpl.show()
+    # tpl.open(tem_file)
 
     app.exec_()
