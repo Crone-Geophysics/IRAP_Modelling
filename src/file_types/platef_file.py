@@ -1,22 +1,60 @@
 import re
 from pathlib import Path
 
+import matplotlib
+from natsort import natsorted
 import pandas as pd
-from PyQt5.QtWidgets import (QLabel, QLineEdit, QFormLayout, QWidget, QCheckBox)
+import numpy as np
+from PyQt5 import QtCore, QtGui
+from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox, QFrame, QHBoxLayout, QSpinBox, QSizePolicy)
+from matplotlib.pyplot import cm
 
 
 class PlateFTab(QWidget):
+    toggle_sig = QtCore.pyqtSignal()
 
-    def __init__(self):
+    def __init__(self, parent=None, color=None, axes=None):
         super().__init__()
         self.layout = QFormLayout()
         self.setLayout(self.layout)
 
-        self.plot_cbox = QCheckBox("Show")
-        self.legend_name = QLineEdit()
+        self.plot_cbox = QCheckBox("Plot")
+        self.plot_cbox.setFocusPolicy(QtCore.Qt.NoFocus)
+        self.plot_cbox.setChecked(True)
 
         self.layout.addRow(self.plot_cbox)
-        self.layout.addRow("Legend Name", self.legend_name)
+        self.layout.addRow("File Type", QLabel("PlateF File"))
+
+        # Channel selection frame
+        self.ch_select_frame = QFrame()
+        self.ch_select_frame.setLayout(QHBoxLayout())
+        self.ch_select_frame.layout().setContentsMargins(0, 0, 0, 0)
+        self.ch_select_frame.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.min_ch = QSpinBox()
+        self.max_ch = QSpinBox()
+        self.min_ch.setMinimum(1)
+        self.max_ch.setMinimum(1)
+        self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
+        self.ch_select_frame.layout().addWidget(self.min_ch)
+        self.ch_select_frame.layout().addWidget(QLabel("to"))
+        self.ch_select_frame.layout().addWidget(self.max_ch)
+
+        self.file = None
+        self.parent = parent
+        self.color = color
+        self.alpha = None  # Remember the last alpha
+        self.color_by_channel = False
+        self.axes = axes
+
+        self.x_artists = []
+        self.y_artists = []
+        self.z_artists = []
+        self.data = pd.DataFrame()
+
+        # Signals
+        self.plot_cbox.toggled.connect(self.toggle)
+        self.min_ch.valueChanged.connect(lambda: self.update_channels("min"))
+        self.max_ch.valueChanged.connect(lambda: self.update_channels("max"))
 
     def read(self, filepath):
         if not isinstance(filepath, Path):
@@ -26,12 +64,208 @@ class PlateFTab(QWidget):
 
         if ext == '.dat':
             parser = PlateFFile()
-            f = parser.parse(filepath)
+            try:
+                file = parser.parse(filepath)
+            except Exception as e:
+                raise Exception(f"The following error occurred trying to parse the file: {e}.")
         else:
             raise ValueError(f"{ext} is not yet supported.")
 
-        if f is None:
+        if file is None:
             raise ValueError(F"No data found in {filepath.name}.")
+
+        # Add the file name as the default for the name in the legend
+        # self.layout.addRow('Units', QLabel(file.units))
+        self.layout.addRow('Current', QLabel(str(file.current)))
+
+        self.layout.addRow('Rx Area', QLabel(str(file.rx_area)))
+
+        if file.components:
+            self.layout.addRow('Components', QLabel('\n'.join(natsorted(file.components))))
+
+        self.layout.addRow(self.ch_select_frame)
+        self.layout.addRow('Channel Times', QLabel(file.ch_times.to_string()))
+
+        # Set the channel range spin boxes
+        self.min_ch.blockSignals(True)
+        self.max_ch.blockSignals(True)
+        self.min_ch.setValue(1)
+        self.min_ch.setMaximum(len(file.ch_times))
+        self.max_ch.setMaximum(len(file.ch_times))
+        self.max_ch.setValue(len(file.ch_times))
+        self.min_ch.blockSignals(False)
+        self.max_ch.blockSignals(False)
+
+        # if not file.loop_coords.empty:
+        #     self.layout.addRow('Loop Coordinates', QLabel(file.loop_coords.to_string()))
+
+        self.data = file.data
+        self.file = file
+
+    def plot(self, alpha=None, color_by_channel=None):
+        """
+        Plot the data on a mpl axes
+        :param alpha: float
+        :param color_by_channel: bool, color each channel a different color or color each line with self.color.
+        """
+        # Remove existing plotted lines
+        self.remove()
+
+        # Use the current alpha is none is passed
+        if alpha is None:
+            alpha = self.alpha
+        else:
+            self.alpha = alpha
+
+        # Use the current legend coloring if none is passed
+        if color_by_channel is None:
+            color_by_channel = self.color_by_channel
+        else:
+            self.color_by_channel = color_by_channel
+
+        self.x_artists = []
+        self.y_artists = []
+        self.z_artists = []
+
+        channels = [f'{num}' for num in range(1, len(self.file.ch_times) + 1)]
+        plotting_channels = channels[self.min_ch.value() - 1: self.max_ch.value()]
+
+        for component in self.file.components:
+            comp_data = self.data[self.data.Component == component]
+
+            if comp_data.empty:
+                print(f"No {component} data in {self.file.filepath.name}.")
+                continue
+
+            size = 8  # For scatter point size
+
+            if color_by_channel is True:
+                rainbow_color = iter(cm.gist_rainbow(np.linspace(0, 1, len(plotting_channels))))
+
+            ax = self.axes[component]
+
+            for ind, ch in enumerate(plotting_channels):
+                # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
+                if color_by_channel is True:
+                    c = next(rainbow_color)  # Cycles through colors
+                    ch_num = int(re.search(r'\d+', ch).group(0)) - 1
+                    label = f"{ch} ({self.file.ch_times[ch_num]} ms)"
+                # If coloring by line, uses the tab's color, and the label is the file name.
+                else:
+                    c = self.color
+                    if ind == 0:
+                        label = f"{self.file.filepath.name}"
+                    else:
+                        label = None
+
+                x = comp_data.Station.astype(float)
+                y = comp_data.loc[:, ch].astype(float)
+
+                if len(x) == 1:
+                    style = 'o'
+                    artist = ax.scatter(x, y,
+                                        color=c,
+                                        marker=style,
+                                        s=size,
+                                        alpha=alpha,
+                                        label=label)
+
+                else:
+                    # style = '--' if 'Q' in freq else '-'
+                    artist, = ax.plot(x, y,
+                                      color=c,
+                                      alpha=alpha,
+                                      # lw=count / 100,
+                                      label=label)
+
+                if component == 'X':
+                    self.x_artists.append(artist)
+                elif component == 'Y':
+                    self.y_artists.append(artist)
+                else:
+                    self.z_artists.append(artist)
+
+                size += 2
+
+    def remove(self):
+        # Remove existing plotted lines
+        for ls, ax in zip([self.x_artists, self.y_artists, self.z_artists], self.axes.values()):
+            if ax.lines:
+                if all([artist in ax.lines for artist in ls]):
+                    for artist in ls:
+                        ax.lines.remove(artist)
+            if ax.collections:
+                if all([artist in ax.collections for artist in ls]):
+                    for artist in ls:
+                        ax.collections.remove(artist)
+
+    def toggle(self):
+        """Toggle the visibility of plotted lines/points"""
+        for ax in self.axes.values():
+            if ax == self.axes['X']:
+                artists = self.x_artists
+            elif ax == self.axes['Y']:
+                artists = self.y_artists
+            else:
+                artists = self.z_artists
+
+            lines = list(filter(lambda x: isinstance(x, matplotlib.lines.Line2D), artists))
+            points = list(filter(lambda x: isinstance(x, matplotlib.collections.PathCollection), artists))  # Scatters
+
+            if lines:
+                if self.plot_cbox.isChecked():
+                    if all([a in ax.lines for a in lines]):  # If the lines are already plotted, pass.
+                        pass
+                    else:
+                        for artist in artists:
+                            ax.lines.append(artist)
+                else:
+                    for artist in artists:
+                        ax.lines.remove(artist)
+
+            if points:
+                # Add or remove the scatter points
+                if self.plot_cbox.isChecked():
+                    if all([a in ax.collections for a in points]):  # If the points are already plotted, pass.
+                        pass
+                    else:
+                        for artist in artists:
+                            ax.collections.append(artist)
+                else:
+                    for artist in artists:
+                        ax.collections.remove(artist)
+
+        self.toggle_sig.emit()
+
+    def update_channels(self, which):
+        """
+        Change the plotted channel range
+        :param which: str, which channel extreme was changed, min or max
+        """
+        self.min_ch.blockSignals(True)
+        self.max_ch.blockSignals(True)
+
+        min_ch = self.min_ch.value()
+        max_ch = self.max_ch.value()
+
+        if which == 'min':
+            if min_ch > max_ch:
+                self.max_ch.setValue(min_ch)
+
+        else:
+            if max_ch < min_ch:
+                self.min_ch.setValue(max_ch)
+
+        self.plot(alpha=None, color_by_channel=None)
+        self.toggle_sig.emit()  # Updates the legend and re-draws
+
+        self.min_ch.blockSignals(False)
+        self.max_ch.blockSignals(False)
+
+        for ax in self.axes.values():
+            # Re-scale the plots
+            ax.relim()
+            ax.autoscale()
 
 
 class PlateFFile:
@@ -42,10 +276,12 @@ class PlateFFile:
     def __init__(self):
         self.filepath = None
 
-        self.ch_times = np.array([])
+        self.ch_times = pd.Series()
         self.current = None
         self.rx_area = None
+        self.units = 'nT/s'
         self.data = pd.DataFrame()
+        self.components = []
 
     def parse(self, filepath):
         self.filepath = Path(filepath)
@@ -82,9 +318,10 @@ class PlateFFile:
 
         # Set the attributes
         self.data = data
-        self.ch_times = ch_times
+        self.ch_times = pd.Series(ch_times)
         self.current = current
         self.rx_area = rx_area
+        self.components = list(self.data.Component.unique())
 
         print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self

@@ -34,6 +34,8 @@ class TEMTab(QWidget):
         self.max_ch = QSpinBox()
         self.min_ch.setMinimum(1)
         self.max_ch.setMinimum(1)
+        # self.min_ch.setFocusPolicy(QtCore.Qt.NoFocus)
+        # self.max_ch.setFocusPolicy(QtCore.Qt.NoFocus)
         self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
         self.ch_select_frame.layout().addWidget(self.min_ch)
         self.ch_select_frame.layout().addWidget(QLabel("to"))
@@ -75,7 +77,6 @@ class TEMTab(QWidget):
             raise ValueError(F"No data found in {filepath.name}.")
 
         # Add the file name as the default for the name in the legend
-        # self.legend_name.setText(filepath.name)
         self.layout.addRow('Line', QLabel(file.line))
         self.layout.addRow('Configuration', QLabel(file.config))
         self.layout.addRow('Elevation', QLabel(str(file.elevation)))
@@ -111,9 +112,9 @@ class TEMTab(QWidget):
         self.min_ch.blockSignals(True)
         self.max_ch.blockSignals(True)
         self.min_ch.setValue(1)
-        self.max_ch.setValue(len(channel_times))
         self.min_ch.setMaximum(len(channel_times))
         self.max_ch.setMaximum(len(channel_times))
+        self.max_ch.setValue(len(channel_times))
         self.min_ch.blockSignals(False)
         self.max_ch.blockSignals(False)
 
@@ -169,7 +170,8 @@ class TEMTab(QWidget):
                 # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
                 if color_by_channel is True:
                     c = next(rainbow_color)  # Cycles through colors
-                    label = f"{ch}"
+                    ch_num = int(re.search(r'\d+', ch).group(0)) - 1
+                    label = f"{ch} ({self.file.ch_times[ch_num]} ms)"
                 # If coloring by line, uses the tab's color, and the label is the file name.
                 else:
                     c = self.color
@@ -282,6 +284,11 @@ class TEMTab(QWidget):
         self.min_ch.blockSignals(False)
         self.max_ch.blockSignals(False)
 
+        for ax in self.axes.values():
+            # Re-scale the plots
+            ax.relim()
+            ax.autoscale()
+
 
 class TEMFile:
     """
@@ -379,9 +386,12 @@ class TEMFile:
         self.turn_on = header_dict['TURNON']
         self.turn_off = header_dict['TURNOFF']
         self.timing_mark = header_dict['TIMINGMARK']
-        self.rx_area_x = header_dict['RXAREAX']
-        self.rx_area_y = header_dict['RXAREAY']
-        self.rx_area_z = header_dict['RXAREAZ']
+        if 'RXAREAX' in header_dict.keys():
+            self.rx_area_x = header_dict['RXAREAX']
+        if 'RXAREAY' in header_dict.keys():
+            self.rx_area_y = header_dict['RXAREAY']
+        if 'RXAREAZ' in header_dict.keys():
+            self.rx_area_z = header_dict['RXAREAZ']
         self.ch_times = ch_times
         self.ch_widths = ch_widths
         self.data = data

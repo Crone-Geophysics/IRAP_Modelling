@@ -20,7 +20,7 @@ from src.file_types.platef_file import PlateFFile, PlateFTab
 from src.file_types.mun_file import MUNFile, MUNTab
 from PyQt5 import (QtCore, uic)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
-                             QScrollArea, QSpinBox, QHBoxLayout, QLabel, QGroupBox, QCheckBox, QButtonGroup)
+                             QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QCheckBox, QButtonGroup)
 
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
@@ -81,6 +81,9 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         self.vca_canvas_frame.layout().addWidget(self.vca_canvas)
         self.vca_canvas_frame.layout().addWidget(toolbar)
 
+        self.axes = [self.hcp_ax, self.vca_ax]
+        self.canvases = [self.hcp_canvas, self.vca_canvas]
+        
         # Status bar
         self.alpha_frame = QFrame()
         self.alpha_frame.setLayout(QHBoxLayout())
@@ -107,7 +110,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
 
     def keyPressEvent(self, e):
         if e.key() == QtCore.Qt.Key_Space:
-            for canvas, ax in zip([self.hcp_canvas, self.vca_canvas], [self.hcp_ax, self.vca_ax]):
+            for canvas, ax in zip(self.canvases, self.axes):
                 ax.relim()
                 ax.autoscale()
 
@@ -215,6 +218,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
 
         # Connect signals
         tab.toggle_sig.connect(self.update_legend)
+        tab.toggle_sig.connect(self.update_ax_scales)
 
         # Create a new tab and add a scroll area to it, where the file tab is added to
         scroll = QScrollArea()
@@ -238,7 +242,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
 
         tab.plot(alpha)
 
-        for canvas, ax in zip([self.hcp_canvas, self.vca_canvas], [self.hcp_ax, self.vca_ax]):
+        for canvas, ax in zip(self.canvases, self.axes):
             # Add the Y axis label
             if not ax.get_ylabel() or self.file_tab_widget.count() == 1:
                 ax.set_ylabel(tab.file.units)
@@ -268,16 +272,16 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
     def update_legend(self):
         """Update the legend to be in alphabetical order"""
 
-        for canvas, ax in zip([self.hcp_canvas, self.vca_canvas], [self.hcp_ax, self.vca_ax]):
+        for canvas, ax in zip(self.canvases, self.axes):
             if self.actionPlot_Legend.isChecked():
                 # Only sort if there are tabs, otherwise it crashes.
                 handles, labels = ax.get_legend_handles_labels()
                 if handles:
                     # sort both labels and handles by labels
                     labels, handles = zip(*natsorted(zip(labels, handles), key=lambda t: t[0]))
-                    ax.legend(handles, labels)
+                    ax.legend(handles, labels).set_draggable(True)
                 else:
-                    ax.legend()
+                    ax.legend().set_draggable(True)
             else:
                 legend = ax.get_legend()
                 if legend:
@@ -286,9 +290,19 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
             canvas.draw()
             canvas.flush_events()
 
+    def update_ax_scales(self):
+        """Auto re-scale every plot"""
+        for ax in self.axes:
+            ax.relim()
+            ax.autoscale()
+
+        for canvas in self.canvases:
+            canvas.draw()
+            canvas.flush_events()
+            
     def update_alpha(self, alpha):
         print(f"New alpha: {alpha / 100}")
-        for canvas, ax in zip([self.hcp_canvas, self.vca_canvas], [self.hcp_ax, self.vca_ax]):
+        for canvas, ax in zip(self.canvases, self.axes):
 
             for artist in ax.lines:
                 artist.set_alpha(alpha / 100)
@@ -354,6 +368,9 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.z_canvas_frame.layout().addWidget(self.z_canvas)
         self.z_canvas_frame.layout().addWidget(toolbar)
 
+        self.axes = [self.x_ax, self.y_ax, self.z_ax]
+        self.canvases = [self.x_canvas, self.y_canvas, self.z_canvas]
+
         # Status bar
         self.alpha_frame = QFrame()
         self.alpha_frame.setLayout(QHBoxLayout())
@@ -386,7 +403,13 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.actionOpen.triggered.connect(self.open_file_dialog)
         self.actionPrint_to_PDF.triggered.connect(self.print_pdf)
         self.actionPlot_Legend.triggered.connect(self.update_legend)
-        self.legend_color_group.buttonClicked.connect(lambda: self.plot_tab(self.file_tab_widget.currentIndex()))
+
+        def replot():
+            for ind in range(self.file_tab_widget.count()):
+                tab = self.file_tab_widget.widget(ind).widget()
+                self.plot_tab(tab)
+
+        self.legend_color_group.buttonClicked.connect(replot)
 
         self.file_tab_widget.tabCloseRequested.connect(self.remove_tab)
         self.alpha_sbox.valueChanged.connect(self.update_alpha)
@@ -395,7 +418,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
     def keyPressEvent(self, e):
         if e.key() == QtCore.Qt.Key_Space:
-            for ax, canvas in zip([self.x_ax, self.y_ax, self.z_ax], [self.x_canvas, self.y_canvas, self.z_canvas]):
+            for ax, canvas in zip(self.axes, self.canvases):
                 ax.relim()
                 ax.autoscale()
 
@@ -498,11 +521,17 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         elif ext == '.dat':
             first_line = open(filepath).readlines()[0]
             if 'Data type:' in first_line:
-                tab = MUNTab(parent=self, color=color, axes=axes)
+                components = ("X", "Y", "Z")
+                component, ok_pressed = QInputDialog.getItem(self, "Choose Component", "Component:", components, 0, False)
+                if ok_pressed and component:
+                    tab = MUNTab(parent=self, color=color, axes=axes, component=component)
+                else:
+                    return
             else:
                 tab = PlateFTab(parent=self, color=color, axes=axes)
         else:
-            tab = None
+            self.msg.showMessage(self, "Error", f"{ext} is not supported.")
+            return
 
         # try:
         tab.read(filepath)
@@ -512,6 +541,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         # Connect signals
         tab.toggle_sig.connect(self.update_legend)  # Update the legend when the plot is toggled
+        tab.toggle_sig.connect(self.update_ax_scales)  # Re-scale the plots
 
         # Create a new tab and add a scroll area to it, where the file tab is added to
         scroll = QScrollArea()
@@ -535,7 +565,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         tab.plot(alpha, color_by_channel=self.color_by_channel_cbox.isChecked())
 
-        for canvas, ax in zip([self.x_canvas, self.y_canvas, self.z_canvas], [self.x_ax, self.y_ax, self.z_ax]):
+        for canvas, ax in zip(self.canvases, self.axes):
             # Add the Y axis label
             if not ax.get_ylabel() or self.file_tab_widget.count() == 1:
                 ax.set_ylabel(tab.file.units)
@@ -565,16 +595,16 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
     def update_legend(self):
         """Update the legend to be in alphabetical order"""
 
-        for canvas, ax in zip([self.x_canvas, self.y_canvas, self.z_canvas], [self.x_ax, self.y_ax, self.z_ax]):
+        for canvas, ax in zip(self.canvases, self.axes):
             if self.actionPlot_Legend.isChecked():
                 # Only sort if there are tabs, otherwise it crashes.
                 handles, labels = ax.get_legend_handles_labels()
                 if handles:
                     # sort both labels and handles by labels
                     labels, handles = zip(*natsorted(zip(labels, handles), key=lambda t: t[0]))
-                    ax.legend(handles, labels)
+                    ax.legend(handles, labels).set_draggable(True)
                 else:
-                    ax.legend()
+                    ax.legend().set_draggable(True)
             else:
                 legend = ax.get_legend()
                 if legend:
@@ -583,9 +613,19 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             canvas.draw()
             canvas.flush_events()
 
+    def update_ax_scales(self):
+        """Auto re-scale every plot"""
+        for ax in self.axes:
+            ax.relim()
+            ax.autoscale()
+
+        for canvas in self.canvases:
+            canvas.draw()
+            canvas.flush_events()
+
     def update_alpha(self, alpha):
         print(f"New alpha: {alpha / 100}")
-        for canvas, ax in zip([self.x_canvas, self.y_canvas, self.z_canvas], [self.x_ax, self.y_ax, self.z_ax]):
+        for canvas, ax in zip(self.canvases, self.axes):
 
             for artist in ax.lines:
                 artist.set_alpha(alpha / 100)
@@ -607,21 +647,23 @@ if __name__ == '__main__':
 
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
 
-    # mun_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
-    # platef_file = sample_files.joinpath(r'PLATEF files\450_50.dat')
+    # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
+    # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_y.dat')
+    # tem_file = sample_files.joinpath(r'PLATEF files\450_50.dat')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Test 4 FEM files\Test 4 - h=5m.fem')
     fem_file = sample_files.joinpath(r'Maxwell files\FEM\Turam 2x4 608S_0.96691A_PFCALC at 1A.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\test Z.fem')
-    tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
+    # tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
     # tem_file = sample_files.joinpath(r'Maxwell files\TEM\50msec Impulse 100S BField.tem')
+    tem_file = sample_files.joinpath(r'Maxwell files\TEM\Test 6 - x1e3.tem')
 
     fpl = FEMPlotter()
     fpl.show()
-    fpl.open(fem_file)
+    # fpl.open(fem_file)
 
-    # tpl = TEMPlotter()
-    # tpl.show()
+    tpl = TEMPlotter()
+    tpl.show()
     # tpl.open(tem_file)
 
     app.exec_()
