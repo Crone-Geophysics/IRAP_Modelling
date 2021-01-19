@@ -18,7 +18,7 @@ from src.file_types.fem_file import FEMFile, FEMTab
 from src.file_types.tem_file import TEMFile, TEMTab
 from src.file_types.platef_file import PlateFFile, PlateFTab
 from src.file_types.mun_file import MUNFile, MUNTab
-from PyQt5 import (QtCore, uic)
+from PyQt5 import (QtCore, QtGui, uic)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
                              QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QCheckBox, QButtonGroup)
 
@@ -40,7 +40,9 @@ tem_plotterUI, _ = uic.loadUiType(TEMPlotterUIFile)
 
 matplotlib.use('Qt5Agg')
 rainbow_colors = iter(cm.rainbow(np.linspace(0, 1, 20)))
-quant_colors = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
+quant_colors = np.nditer(np.array(plt.rcParams['axes.prop_cycle'].by_key()['color']))
+# iter_colors = np.nditer(quant_colors)
+# quant_colors = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 # color = iter(cm.tab10())
 
 
@@ -50,9 +52,9 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         super().__init__()
         self.setupUi(self)
         self.setAcceptDrops(True)
-        self.setWindowTitle("IRAP FEM Plotter")
+        self.setWindowTitle("FEM Plotter v0.0")
         self.resize(800, 600)
-        # self.setWindowIcon(QtGui.QIcon(str(icons_path.joinpath('voltmeter.png'))))
+        self.setWindowIcon(QtGui.QIcon(str(icons_path.joinpath('fem_plotter.png'))))
         self.err_msg = QErrorMessage()
         self.msg = QMessageBox()
         self.opened_files = []
@@ -85,9 +87,12 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         self.canvases = [self.hcp_canvas, self.vca_canvas]
         
         # Status bar
+        self.num_files_label = QLabel()
+
         self.alpha_frame = QFrame()
         self.alpha_frame.setLayout(QHBoxLayout())
         self.alpha_frame.layout().addWidget(QLabel("Plot Alpha: "))
+        self.alpha_frame.layout().setContentsMargins(0, 0, 0, 0)
         self.alpha_frame.setMaximumWidth(150)
 
         self.alpha_sbox = QSpinBox()
@@ -96,6 +101,8 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         self.alpha_sbox.setValue(100)
 
         self.alpha_frame.layout().addWidget(self.alpha_sbox)
+
+        self.statusBar().addPermanentWidget(self.num_files_label, 1)
         self.statusBar().addPermanentWidget(self.alpha_frame)
 
         # Signals
@@ -196,10 +203,11 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         print(f"Opening {filepath.name}.")
 
         try:
-            color = next(quant_colors)  # Cycles through colors
+            color = str(next(quant_colors))  # Cycles through colors
         except StopIteration:
-            self.msg.showMessage(self, "Error", "Maximum number of files reached.")
-            return
+            print(f"Resetting color iterator.")
+            quant_colors.reset()
+            color = str(next(quant_colors))
 
         # Create a dict for which axes components get plotted on
         axes = {'HCP': self.hcp_ax, 'VCA': self.vca_ax}
@@ -210,11 +218,11 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         else:
             tab = None
 
-        # try:
-        tab.read(filepath)
-        # except Exception as e:
-        #     self.err_msg.showMessage(str(e))
-        #     return
+        try:
+            tab.read(filepath)
+        except Exception as e:
+            self.err_msg.showMessage(str(e))
+            return
 
         # Connect signals
         tab.toggle_sig.connect(self.update_legend)
@@ -316,18 +324,18 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         self.update_legend()
 
     def update_num_files(self):
-        self.statusBar().showMessage(f"{len(self.opened_files)} file(s) opened.")
+        self.num_files_label.setText(f"{len(self.opened_files)} file(s) opened.")
 
-
+# TODO Create comparator tool to compare two files?
 class TEMPlotter(QMainWindow, tem_plotterUI):
 
     def __init__(self):
         super().__init__()
         self.setupUi(self)
         self.setAcceptDrops(True)
-        self.setWindowTitle("IRAP TEM Plotter")
+        self.setWindowTitle("TEM Plotter v0.0")
         self.resize(800, 600)
-        # self.setWindowIcon(QtGui.QIcon(str(icons_path.joinpath('voltmeter.png'))))
+        self.setWindowIcon(QtGui.QIcon(str(icons_path.joinpath('tem_plotter.png'))))
         self.err_msg = QErrorMessage()
         self.msg = QMessageBox()
         self.opened_files = []
@@ -372,9 +380,12 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.canvases = [self.x_canvas, self.y_canvas, self.z_canvas]
 
         # Status bar
+        self.num_files_label = QLabel()
+
         self.alpha_frame = QFrame()
         self.alpha_frame.setLayout(QHBoxLayout())
         self.alpha_frame.layout().addWidget(QLabel("Plot Alpha: "))
+        self.alpha_frame.layout().setContentsMargins(0, 0, 0, 0)
         self.alpha_frame.setMaximumWidth(150)
 
         self.alpha_sbox = QSpinBox()
@@ -384,9 +395,9 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         self.alpha_frame.layout().addWidget(self.alpha_sbox)
 
-        # Legend option
         self.legend_box = QFrame()
         self.legend_box.setLayout(QHBoxLayout())
+        self.legend_box.layout().setContentsMargins(0, 0, 0, 0)
         self.color_by_line_cbox = QCheckBox("Color by Line")
         self.color_by_channel_cbox = QCheckBox("Color by Channel")
         self.legend_color_group = QButtonGroup()
@@ -396,6 +407,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.legend_box.layout().addWidget(self.color_by_channel_cbox)
         self.color_by_line_cbox.setChecked(True)
 
+        self.statusBar().addPermanentWidget(self.num_files_label, 1)
         self.statusBar().addPermanentWidget(self.legend_box)
         self.statusBar().addPermanentWidget(self.alpha_frame)
 
@@ -507,10 +519,11 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         print(f"Opening {filepath.name}.")
 
         try:
-            color = next(quant_colors)  # Cycles through colors
+            color = str(next(quant_colors))  # Cycles through colors
         except StopIteration:
-            self.msg.showMessage(self, "Error", "Maximum number of files reached.")
-            return
+            print(f"Resetting color iterator.")
+            quant_colors.reset()
+            color = str(next(quant_colors))
 
         # Create a dict for which axes components get plotted on
         axes = {'X': self.x_ax, 'Y': self.y_ax, 'Z': self.z_ax}
@@ -533,11 +546,11 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             self.msg.showMessage(self, "Error", f"{ext} is not supported.")
             return
 
-        # try:
-        tab.read(filepath)
-        # except Exception as e:
-        #     self.err_msg.showMessage(str(e))
-        #     return
+        try:
+            tab.read(filepath)
+        except Exception as e:
+            self.err_msg.showMessage(str(e))
+            return
 
         # Connect signals
         tab.toggle_sig.connect(self.update_legend)  # Update the legend when the plot is toggled
@@ -639,7 +652,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.update_legend()
 
     def update_num_files(self):
-        self.statusBar().showMessage(f"{len(self.opened_files)} file(s) opened.")
+        self.num_files_label.setText(f"{len(self.opened_files)} file(s) opened.")
 
 
 if __name__ == '__main__':
@@ -652,18 +665,19 @@ if __name__ == '__main__':
     # tem_file = sample_files.joinpath(r'PLATEF files\450_50.dat')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Test 4 FEM files\Test 4 - h=5m.fem')
-    fem_file = sample_files.joinpath(r'Maxwell files\FEM\Turam 2x4 608S_0.96691A_PFCALC at 1A.fem')
+    # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Turam 2x4 608S_0.96691A_PFCALC at 1A.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\test Z.fem')
     # tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
     # tem_file = sample_files.joinpath(r'Maxwell files\TEM\50msec Impulse 100S BField.tem')
     tem_file = sample_files.joinpath(r'Maxwell files\TEM\Test 6 - x1e3.tem')
 
-    fpl = FEMPlotter()
-    fpl.show()
+    # fpl = FEMPlotter()
+    # fpl.show()
     # fpl.open(fem_file)
 
     tpl = TEMPlotter()
     tpl.show()
-    # tpl.open(tem_file)
+    tpl.open(tem_file)
+    # tpl.print_pdf()
 
     app.exec_()
