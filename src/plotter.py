@@ -326,6 +326,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
     def update_num_files(self):
         self.num_files_label.setText(f"{len(self.opened_files)} file(s) opened.")
 
+
 # TODO Create comparator tool to compare two files?
 class TEMPlotter(QMainWindow, tem_plotterUI):
 
@@ -663,7 +664,7 @@ if __name__ == '__main__':
     # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
     # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_y.dat')
     # tem_file = sample_files.joinpath(r'PLATEF files\450_50.dat')
-    # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
+    fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Test 4 FEM files\Test 4 - h=5m.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Turam 2x4 608S_0.96691A_PFCALC at 1A.fem')
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\test Z.fem')

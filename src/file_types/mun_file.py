@@ -36,7 +36,7 @@ class MUNTab(QWidget):
         self.max_ch.setMinimum(1)
         # self.min_ch.setFocusPolicy(QtCore.Qt.TabFocus)
         # self.max_ch.setFocusPolicy(QtCore.Qt.TabFocus)
-        self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
+        # self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
         self.ch_select_frame.layout().addWidget(self.min_ch)
         self.ch_select_frame.layout().addWidget(QLabel("to"))
         self.ch_select_frame.layout().addWidget(self.max_ch)
@@ -79,7 +79,7 @@ class MUNTab(QWidget):
         self.layout.addRow('Units', QLabel(file.units))
         self.layout.addRow('Component', QLabel(self.component))
 
-        self.layout.addRow(self.ch_select_frame)
+        self.layout.addRow(QLabel("Plot Channels"), self.ch_select_frame)
         # Create a data frame with channel times and channel widths
         file.ch_times.index += 1
         file.ch_times.name = 'Times'

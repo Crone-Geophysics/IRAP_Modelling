@@ -36,7 +36,7 @@ class TEMTab(QWidget):
         self.max_ch.setMinimum(1)
         # self.min_ch.setFocusPolicy(QtCore.Qt.NoFocus)
         # self.max_ch.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
+        # self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
         self.ch_select_frame.layout().addWidget(self.min_ch)
         self.ch_select_frame.layout().addWidget(QLabel("to"))
         self.ch_select_frame.layout().addWidget(self.max_ch)
@@ -101,7 +101,7 @@ class TEMTab(QWidget):
         if file.components:
             self.layout.addRow('Components', QLabel('\n'.join(natsorted(file.components))))
 
-        self.layout.addRow(self.ch_select_frame)
+        self.layout.addRow(QLabel("Plot Channels"), self.ch_select_frame)
         # Create a data frame with channel times and channel widths
         channel_times = pd.DataFrame(zip(file.ch_times, file.ch_widths),
                                      columns=['Times', 'Widths'])
@@ -127,6 +127,91 @@ class TEMTab(QWidget):
     def plot(self, alpha=None, color_by_channel=None):
         """
         Plot the data on a mpl axes
+        :param alpha: float
+        :param color_by_channel: bool, color each channel a different color or color each line with self.color.
+        """
+        # Remove existing plotted lines
+        self.remove()
+
+        # Use the current alpha is none is passed
+        if alpha is None:
+            alpha = self.alpha
+        else:
+            self.alpha = alpha
+
+        # Use the current legend coloring if none is passed
+        if color_by_channel is None:
+            color_by_channel = self.color_by_channel
+        else:
+            self.color_by_channel = color_by_channel
+
+        self.x_artists = []
+        self.y_artists = []
+        self.z_artists = []
+
+        channels = [f'CH{num}' for num in range(1, len(self.file.ch_times) + 1)]
+        plotting_channels = channels[self.min_ch.value() - 1: self.max_ch.value()]
+
+        for component in self.file.components:
+            comp_data = self.data[self.data.COMPONENT == component]
+
+            if comp_data.empty:
+                print(f"No {component} data in {self.file.filepath.name}.")
+                continue
+
+            size = 8  # For scatter point size
+
+            if color_by_channel is True:
+                rainbow_color = iter(cm.gist_rainbow(np.linspace(0, 1, len(plotting_channels))))
+
+            ax = self.axes[component]
+
+            for ind, ch in enumerate(plotting_channels):
+                # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
+                if color_by_channel is True:
+                    c = next(rainbow_color)  # Cycles through colors
+                    ch_num = int(re.search(r'\d+', ch).group(0)) - 1
+                    label = f"{ch} ({self.file.ch_times[ch_num]} ms)"
+                # If coloring by line, uses the tab's color, and the label is the file name.
+                else:
+                    c = self.color
+                    if ind == 0:
+                        label = f"{self.file.filepath.name}"
+                    else:
+                        label = None
+
+                x = comp_data.STATION.astype(float)
+                y = comp_data.loc[:, ch].astype(float)
+
+                if len(x) == 1:
+                    style = 'o'
+                    artist = ax.scatter(x, y,
+                                        color=c,
+                                        marker=style,
+                                        s=size,
+                                        alpha=alpha,
+                                        label=label)
+
+                else:
+                    # style = '--' if 'Q' in freq else '-'
+                    artist, = ax.plot(x, y,
+                                      color=c,
+                                      alpha=alpha,
+                                      # lw=count / 100,
+                                      label=label)
+
+                if component == 'X':
+                    self.x_artists.append(artist)
+                elif component == 'Y':
+                    self.y_artists.append(artist)
+                else:
+                    self.z_artists.append(artist)
+
+                size += 2
+
+    def plot_decay(self, alpha=None, color_by_channel=None):
+        """
+        Plot the decay data on a mpl axes
         :param alpha: float
         :param color_by_channel: bool, color each channel a different color or color each line with self.color.
         """

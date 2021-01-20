@@ -34,7 +34,7 @@ class PlateFTab(QWidget):
         self.max_ch = QSpinBox()
         self.min_ch.setMinimum(1)
         self.max_ch.setMinimum(1)
-        self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
+        # self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
         self.ch_select_frame.layout().addWidget(self.min_ch)
         self.ch_select_frame.layout().addWidget(QLabel("to"))
         self.ch_select_frame.layout().addWidget(self.max_ch)
@@ -83,7 +83,7 @@ class PlateFTab(QWidget):
         if file.components:
             self.layout.addRow('Components', QLabel('\n'.join(natsorted(file.components))))
 
-        self.layout.addRow(self.ch_select_frame)
+        self.layout.addRow(QLabel("Plot Channels"), self.ch_select_frame)
         self.layout.addRow('Channel Times', QLabel(file.ch_times.to_string()))
 
         # Set the channel range spin boxes
