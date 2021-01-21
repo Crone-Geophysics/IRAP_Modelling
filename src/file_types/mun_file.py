@@ -6,12 +6,13 @@ from natsort import natsorted
 import pandas as pd
 import numpy as np
 from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox, QFrame, QHBoxLayout, QSpinBox, QSizePolicy)
+from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox, QFrame, QHBoxLayout, QSpinBox, QDoubleSpinBox,
+                             QSizePolicy)
 from matplotlib.pyplot import cm
 
 
 class MUNTab(QWidget):
-    toggle_sig = QtCore.pyqtSignal()
+    plot_changed_sig = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, color=None, axes=None, component=None):
         super().__init__()
@@ -25,6 +26,29 @@ class MUNTab(QWidget):
         self.layout.addRow(self.plot_cbox)
         self.layout.addRow("File Type", QLabel("MUN File"))
 
+        # Data editing
+        self.scale_data_sbox = QDoubleSpinBox()
+        self.scale_data_sbox.setValue(1.)
+        self.scale_data_sbox.setSingleStep(0.1)
+        self.scale_data_sbox.setMaximum(1e9)
+        self.scale_data_sbox.setMinimum(-1e9)
+        self.scale_data_sbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.layout.addRow("Scale Data", self.scale_data_sbox)
+
+        self.shift_stations_sbox = QDoubleSpinBox()
+        self.shift_stations_sbox.setMaximum(100000)
+        self.shift_stations_sbox.setMinimum(-100000)
+        self.shift_stations_sbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.layout.addRow("Shift Stations", self.shift_stations_sbox)
+
+        self.alpha_sbox = QSpinBox()
+        self.alpha_sbox.setSingleStep(10)
+        self.alpha_sbox.setRange(0, 100)
+        self.alpha_sbox.setValue(100)
+        self.alpha_sbox.setSuffix('%')
+        self.alpha_sbox.setFixedWidth(100)
+        self.layout.addRow("Plot Alpha", self.alpha_sbox)
+
         # Channel selection frame
         self.ch_select_frame = QFrame()
         self.ch_select_frame.setLayout(QHBoxLayout())
@@ -34,6 +58,8 @@ class MUNTab(QWidget):
         self.max_ch = QSpinBox()
         self.min_ch.setMinimum(1)
         self.max_ch.setMinimum(1)
+        self.min_ch.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        self.max_ch.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         # self.min_ch.setFocusPolicy(QtCore.Qt.TabFocus)
         # self.max_ch.setFocusPolicy(QtCore.Qt.TabFocus)
         # self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
@@ -54,6 +80,12 @@ class MUNTab(QWidget):
 
         # Signals
         self.plot_cbox.toggled.connect(self.toggle)
+        self.scale_data_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
+        self.scale_data_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
+        self.shift_stations_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
+        self.shift_stations_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
+        self.alpha_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
+        self.alpha_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
         self.min_ch.valueChanged.connect(lambda: self.update_channels("min"))
         self.max_ch.valueChanged.connect(lambda: self.update_channels("max"))
 
@@ -98,7 +130,7 @@ class MUNTab(QWidget):
         self.data = file.data
         self.file = file
 
-    def plot(self, alpha=None, color_by_channel=None):
+    def plot(self, color_by_channel=None):
         """
         Plot the data on a mpl axes
         :param alpha: float
@@ -106,12 +138,6 @@ class MUNTab(QWidget):
         """
         # Remove existing plotted lines
         self.remove()
-
-        # Use the current alpha is none is passed
-        if alpha is None:
-            alpha = self.alpha
-        else:
-            self.alpha = alpha
 
         # Use the current legend coloring if none is passed
         if color_by_channel is None:
@@ -148,8 +174,8 @@ class MUNTab(QWidget):
                 else:
                     label = None
 
-            x = data.Station.astype(float)
-            y = data.loc[:, ch].astype(float)
+            x = data.Station.astype(float) + self.shift_stations_sbox.value()
+            y = data.loc[:, ch].astype(float) * self.scale_data_sbox.value()
 
             if len(x) == 1:
                 style = 'o'
@@ -157,14 +183,14 @@ class MUNTab(QWidget):
                                          color=c,
                                          marker=style,
                                          s=size,
-                                         alpha=alpha,
+                                         alpha=self.alpha_sbox.value() / 100,
                                          label=label)
 
             else:
                 # style = '--' if 'Q' in freq else '-'
                 artist, = self.ax.plot(x, y,
                                        color=c,
-                                       alpha=alpha,
+                                       alpha=self.alpha_sbox.value() / 100,
                                        # lw=count / 100,
                                        label=label)
 
@@ -212,7 +238,7 @@ class MUNTab(QWidget):
                 for artist in self.artists:
                     self.ax.collections.remove(artist)
 
-        self.toggle_sig.emit()
+        self.plot_changed_sig.emit()
 
     def update_channels(self, which):
         """
@@ -234,7 +260,7 @@ class MUNTab(QWidget):
                 self.min_ch.setValue(max_ch)
 
         self.plot(alpha=None, color_by_channel=None)
-        self.toggle_sig.emit()  # Updates the legend and re-draws
+        self.plot_changed_sig.emit()  # Updates the legend and re-draws
 
         # Re-scale the plots
         self.ax.relim()

@@ -1,16 +1,16 @@
 import re
 from pathlib import Path
 
-from natsort import natsorted
-import pandas as pd
 import matplotlib
 import numpy as np
+import pandas as pd
 from PyQt5 import QtCore
-from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox)
+from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox, QDoubleSpinBox, QSizePolicy, QSpinBox)
+from natsort import natsorted
 
 
 class FEMTab(QWidget):
-    toggle_sig = QtCore.pyqtSignal()
+    plot_changed_sig = QtCore.pyqtSignal()
 
     def __init__(self, parent=None, color=None, axes=None):
         super().__init__()
@@ -25,6 +25,29 @@ class FEMTab(QWidget):
         self.layout.addRow(self.plot_cbox)
         self.layout.addRow("File Type", QLabel("Maxwell FEM"))
 
+        # Data editing
+        self.scale_data_sbox = QDoubleSpinBox()
+        self.scale_data_sbox.setValue(1.)
+        self.scale_data_sbox.setSingleStep(0.1)
+        self.scale_data_sbox.setMaximum(1e9)
+        self.scale_data_sbox.setMinimum(-1e9)
+        self.scale_data_sbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.layout.addRow("Scale Data", self.scale_data_sbox)
+
+        self.shift_stations_sbox = QDoubleSpinBox()
+        self.shift_stations_sbox.setMaximum(100000)
+        self.shift_stations_sbox.setMinimum(-100000)
+        self.shift_stations_sbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
+        self.layout.addRow("Shift Stations", self.shift_stations_sbox)
+
+        self.alpha_sbox = QSpinBox()
+        self.alpha_sbox.setSingleStep(10)
+        self.alpha_sbox.setRange(0, 100)
+        self.alpha_sbox.setValue(100)
+        self.alpha_sbox.setSuffix('%')
+        self.alpha_sbox.setFixedWidth(100)
+        self.layout.addRow("Plot Alpha", self.alpha_sbox)
+
         self.file = None
         self.parent = parent
         self.color = color
@@ -37,6 +60,12 @@ class FEMTab(QWidget):
 
         # Signals
         self.plot_cbox.toggled.connect(self.toggle)
+        self.scale_data_sbox.valueChanged.connect(self.plot)
+        self.scale_data_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
+        self.shift_stations_sbox.valueChanged.connect(self.plot)
+        self.shift_stations_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
+        self.alpha_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
+        self.alpha_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
 
     def read(self, filepath):
         if not isinstance(filepath, Path):
@@ -92,19 +121,13 @@ class FEMTab(QWidget):
         self.data = file.data
         self.file = file
 
-    def plot(self, alpha=None):
+    def plot(self):
         """
         Plot the data on a mpl axes
         :param alpha : float
         """
         # Remove existing plotted lines
         self.remove()
-
-        # Use the current alpha is none is passed
-        if alpha is None:
-            alpha = self.alpha
-        else:
-            self.alpha = alpha
 
         self.hcp_artists = []
         self.vca_artists = []
@@ -122,8 +145,8 @@ class FEMTab(QWidget):
                     continue
 
                 ax = self.axes[component]
-                x = comp_data.STATION.astype(float)
-                y = comp_data.loc[:, freq].astype(float)
+                x = comp_data.STATION.astype(float) + self.shift_stations_sbox.value()
+                y = comp_data.loc[:, freq].astype(float) * self.scale_data_sbox.value()
 
                 if len(x) == 1:
                     style = 'x' if 'Q' in freq else 'o'
@@ -131,7 +154,7 @@ class FEMTab(QWidget):
                                         color=self.color,
                                         marker=style,
                                         s=size,
-                                        alpha=alpha,
+                                        alpha=self.alpha_sbox.value() / 100,
                                         label=f"{freq} ({self.file.filepath.name})")
 
                 else:
@@ -139,7 +162,7 @@ class FEMTab(QWidget):
                     artist, = ax.plot(x, y,
                                       ls=style,
                                       color=self.color,
-                                      alpha=alpha,
+                                      alpha=self.alpha_sbox.value() / 100,
                                       label=f"{freq} ({self.file.filepath.name})")
 
                 if component == 'HCP':
@@ -236,7 +259,7 @@ class FEMTab(QWidget):
                     for artist in artists:
                         ax.collections.remove(artist)
 
-        self.toggle_sig.emit()
+        self.plot_changed_sig.emit()
 
 
 class FEMFile:

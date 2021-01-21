@@ -225,8 +225,8 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
             return
 
         # Connect signals
-        tab.toggle_sig.connect(self.update_legend)
-        tab.toggle_sig.connect(self.update_ax_scales)
+        tab.plot_changed_sig.connect(self.update_legend)
+        tab.plot_changed_sig.connect(self.update_ax_scales)
 
         # Create a new tab and add a scroll area to it, where the file tab is added to
         scroll = QScrollArea()
@@ -383,19 +383,6 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         # Status bar
         self.num_files_label = QLabel()
 
-        self.alpha_frame = QFrame()
-        self.alpha_frame.setLayout(QHBoxLayout())
-        self.alpha_frame.layout().addWidget(QLabel("Plot Alpha: "))
-        self.alpha_frame.layout().setContentsMargins(0, 0, 0, 0)
-        self.alpha_frame.setMaximumWidth(150)
-
-        self.alpha_sbox = QSpinBox()
-        self.alpha_sbox.setSingleStep(10)
-        self.alpha_sbox.setRange(0, 100)
-        self.alpha_sbox.setValue(100)
-
-        self.alpha_frame.layout().addWidget(self.alpha_sbox)
-
         self.legend_box = QFrame()
         self.legend_box.setLayout(QHBoxLayout())
         self.legend_box.layout().setContentsMargins(0, 0, 0, 0)
@@ -410,7 +397,6 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         self.statusBar().addPermanentWidget(self.num_files_label, 1)
         self.statusBar().addPermanentWidget(self.legend_box)
-        self.statusBar().addPermanentWidget(self.alpha_frame)
 
         # Signals
         self.actionOpen.triggered.connect(self.open_file_dialog)
@@ -423,9 +409,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
                 self.plot_tab(tab)
 
         self.legend_color_group.buttonClicked.connect(replot)
-
         self.file_tab_widget.tabCloseRequested.connect(self.remove_tab)
-        self.alpha_sbox.valueChanged.connect(self.update_alpha)
 
         self.update_num_files()
 
@@ -476,14 +460,19 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
                     # Only print the figure if there are plotted lines
                     if figure.axes[0].lines:
                         # Create a copy of the figure
-                        buf = io.BytesIO()
-                        pickle.dump(figure, buf)
-                        buf.seek(0)
-                        save_figure = pickle.load(buf)
+                        # buf = io.BytesIO()
+                        # pickle.dump(figure, buf)
+                        # buf.seek(0)
+                        # save_figure = pickle.load(buf)
 
                         # Resize and save the figure
-                        save_figure.set_size_inches((11, 8.5))
-                        pdf.savefig(save_figure, orientation='landscape')
+                        # save_figure.set_size_inches((11, 8.5))
+                        # pdf.savefig(save_figure, orientation='landscape')
+
+                        old_size = figure.get_size_inches().copy()
+                        figure.set_size_inches((11, 8.5))
+                        pdf.savefig(figure, orientation='landscape')
+                        figure.set_size_inches(old_size)
 
             self.statusBar().showMessage(f"PDF saved to {filepath}.", 1500)
             os.startfile(filepath)
@@ -554,8 +543,8 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             return
 
         # Connect signals
-        tab.toggle_sig.connect(self.update_legend)  # Update the legend when the plot is toggled
-        tab.toggle_sig.connect(self.update_ax_scales)  # Re-scale the plots
+        tab.plot_changed_sig.connect(self.update_legend)  # Update the legend when the plot is toggled
+        tab.plot_changed_sig.connect(self.update_ax_scales)  # Re-scale the plots
 
         # Create a new tab and add a scroll area to it, where the file tab is added to
         scroll = QScrollArea()
@@ -575,9 +564,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             ind = tab
             tab = self.file_tab_widget.widget(ind).widget()
 
-        alpha = self.alpha_sbox.value() / 100
-
-        tab.plot(alpha, color_by_channel=self.color_by_channel_cbox.isChecked())
+        tab.plot(color_by_channel=self.color_by_channel_cbox.isChecked())
 
         for canvas, ax in zip(self.canvases, self.axes):
             # Add the Y axis label
@@ -637,20 +624,20 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             canvas.draw()
             canvas.flush_events()
 
-    def update_alpha(self, alpha):
-        print(f"New alpha: {alpha / 100}")
-        for canvas, ax in zip(self.canvases, self.axes):
-
-            for artist in ax.lines:
-                artist.set_alpha(alpha / 100)
-
-            for artist in ax.collections:
-                artist.set_alpha(alpha / 100)
-
-            canvas.draw()
-            canvas.flush_events()
-
-        self.update_legend()
+    # def update_alpha(self, alpha):
+    #     print(f"New alpha: {alpha / 100}")
+    #     for canvas, ax in zip(self.canvases, self.axes):
+    #
+    #         for artist in ax.lines:
+    #             artist.set_alpha(alpha / 100)
+    #
+    #         for artist in ax.collections:
+    #             artist.set_alpha(alpha / 100)
+    #
+    #         canvas.draw()
+    #         canvas.flush_events()
+    #
+    #     self.update_legend()
 
     def update_num_files(self):
         self.num_files_label.setText(f"{len(self.opened_files)} file(s) opened.")
