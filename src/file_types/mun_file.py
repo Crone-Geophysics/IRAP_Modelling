@@ -1,93 +1,21 @@
 import re
 from pathlib import Path
 
-import matplotlib
-from natsort import natsorted
-import pandas as pd
 import numpy as np
-from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox, QFrame, QHBoxLayout, QSpinBox, QDoubleSpinBox,
-                             QSizePolicy)
-from matplotlib.pyplot import cm
+import pandas as pd
+from PyQt5.QtWidgets import (QLabel)
+
+from src.file_types.base_tdem_file import BaseTDEM
 
 
-class MUNTab(QWidget):
-    plot_changed_sig = QtCore.pyqtSignal()
+class MUNTab(BaseTDEM):
 
-    def __init__(self, parent=None, color=None, axes=None, component=None):
-        super().__init__()
-        self.layout = QFormLayout()
-        self.setLayout(self.layout)
+    def __init__(self, parent=None, axes=None, component=None):
+        super().__init__(parent=parent, axes=axes)
+        self.layout.insertRow(1, "File Type", QLabel("MUN File"))
 
-        self.plot_cbox = QCheckBox("Plot")
-        self.plot_cbox.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.plot_cbox.setChecked(True)
-
-        self.layout.addRow(self.plot_cbox)
-        self.layout.addRow("File Type", QLabel("MUN File"))
-
-        # Data editing
-        self.scale_data_sbox = QDoubleSpinBox()
-        self.scale_data_sbox.setValue(1.)
-        self.scale_data_sbox.setSingleStep(0.1)
-        self.scale_data_sbox.setMaximum(1e9)
-        self.scale_data_sbox.setMinimum(-1e9)
-        self.scale_data_sbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.layout.addRow("Scale Data", self.scale_data_sbox)
-
-        self.shift_stations_sbox = QDoubleSpinBox()
-        self.shift_stations_sbox.setMaximum(100000)
-        self.shift_stations_sbox.setMinimum(-100000)
-        self.shift_stations_sbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.layout.addRow("Shift Stations", self.shift_stations_sbox)
-
-        self.alpha_sbox = QSpinBox()
-        self.alpha_sbox.setSingleStep(10)
-        self.alpha_sbox.setRange(0, 100)
-        self.alpha_sbox.setValue(100)
-        self.alpha_sbox.setSuffix('%')
-        self.alpha_sbox.setFixedWidth(100)
-        self.layout.addRow("Plot Alpha", self.alpha_sbox)
-
-        # Channel selection frame
-        self.ch_select_frame = QFrame()
-        self.ch_select_frame.setLayout(QHBoxLayout())
-        self.ch_select_frame.layout().setContentsMargins(0, 0, 0, 0)
-        self.ch_select_frame.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.min_ch = QSpinBox()
-        self.max_ch = QSpinBox()
-        self.min_ch.setMinimum(1)
-        self.max_ch.setMinimum(1)
-        self.min_ch.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        self.max_ch.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        # self.min_ch.setFocusPolicy(QtCore.Qt.TabFocus)
-        # self.max_ch.setFocusPolicy(QtCore.Qt.TabFocus)
-        # self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
-        self.ch_select_frame.layout().addWidget(self.min_ch)
-        self.ch_select_frame.layout().addWidget(QLabel("to"))
-        self.ch_select_frame.layout().addWidget(self.max_ch)
-
-        self.file = None
-        self.parent = parent
-        self.color = color
-        self.alpha = None  # Remember the last alpha
-        self.color_by_channel = False
-        self.ax = axes[component]
         self.component = component
-
-        self.artists = []
-        self.data = pd.DataFrame()
-
-        # Signals
-        self.plot_cbox.toggled.connect(self.toggle)
-        self.scale_data_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
-        self.scale_data_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
-        self.shift_stations_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
-        self.shift_stations_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
-        self.alpha_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
-        self.alpha_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
-        self.min_ch.valueChanged.connect(lambda: self.update_channels("min"))
-        self.max_ch.valueChanged.connect(lambda: self.update_channels("max"))
+        self.color = "g"
 
     def read(self, filepath):
         if not isinstance(filepath, Path):
@@ -129,23 +57,14 @@ class MUNTab(QWidget):
 
         self.data = file.data
         self.file = file
+        self.legend_name.setText(f"{self.file.filepath.stem} (MUN)")
 
-    def plot(self, color_by_channel=None):
+    def plot(self):
         """
         Plot the data on a mpl axes
-        :param alpha: float
-        :param color_by_channel: bool, color each channel a different color or color each line with self.color.
         """
         # Remove existing plotted lines
-        self.remove()
-
-        # Use the current legend coloring if none is passed
-        if color_by_channel is None:
-            color_by_channel = self.color_by_channel
-        else:
-            self.color_by_channel = color_by_channel
-
-        self.artists = []
+        self.clear()
 
         channels = [f'{num}' for num in range(1, len(self.file.ch_times) + 1)]
         plotting_channels = channels[self.min_ch.value() - 1: self.max_ch.value()]
@@ -158,116 +77,42 @@ class MUNTab(QWidget):
 
         size = 8  # For scatter point size
 
-        if color_by_channel is True:
-            rainbow_color = iter(cm.gist_rainbow(np.linspace(0, 1, len(plotting_channels))))
-
         for ind, ch in enumerate(plotting_channels):
-            # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
-            if color_by_channel is True:
-                c = next(rainbow_color)  # Cycles through colors
-                label = f"CH{ch} ({self.file.ch_times[int(ch)]} ms)"
-            # If coloring by line, uses the tab's color, and the label is the file name.
+            if ind == 0:
+                label = self.legend_name.text()
             else:
-                c = self.color
-                if ind == 0:
-                    label = f"{self.file.filepath.name}"
-                else:
-                    label = None
+                label = None
 
             x = data.Station.astype(float) + self.shift_stations_sbox.value()
             y = data.loc[:, ch].astype(float) * self.scale_data_sbox.value()
 
             if len(x) == 1:
                 style = 'o'
-                artist = self.ax.scatter(x, y,
-                                         color=c,
-                                         marker=style,
-                                         s=size,
-                                         alpha=self.alpha_sbox.value() / 100,
-                                         label=label)
+                artist = self.axes[self.component].scatter(x, y,
+                                                           color=self.color,
+                                                           marker=style,
+                                                           s=size,
+                                                           alpha=self.alpha_sbox.value() / 100,
+                                                           label=label)
 
             else:
                 # style = '--' if 'Q' in freq else '-'
-                artist, = self.ax.plot(x, y,
-                                       color=c,
-                                       alpha=self.alpha_sbox.value() / 100,
-                                       # lw=count / 100,
-                                       label=label)
+                artist, = self.axes[self.component].plot(x, y,
+                                                         color=self.color,
+                                                         alpha=self.alpha_sbox.value() / 100,
+                                                         # lw=count / 100,
+                                                         label=label)
 
-            self.artists.append(artist)
+            if self.component == 'X':
+                self.x_artists.append(artist)
+            elif self.component == 'Y':
+                self.y_artists.append(artist)
+            else:
+                self.z_artists.append(artist)
 
             size += 2
 
-    def remove(self):
-        # Remove existing plotted lines
-        if self.ax.lines:
-            if all([artist in self.ax.lines for artist in self.artists]):
-                for artist in self.artists:
-                    self.ax.lines.remove(artist)
-        if self.ax.collections:
-            if all([artist in self.ax.collections for artist in self.artists]):
-                for artist in self.artists:
-                    self.ax.collections.remove(artist)
-
-    def toggle(self):
-        """Toggle the visibility of plotted lines/points"""
-
-        lines = list(filter(lambda x: isinstance(x, matplotlib.lines.Line2D), self.artists))
-        points = list(filter(lambda x: isinstance(x, matplotlib.collections.PathCollection), self.artists))  # Scatters
-
-        if lines:
-            if self.plot_cbox.isChecked():
-                if all([a in self.ax.lines for a in lines]):  # If the lines are already plotted, pass.
-                    pass
-                else:
-                    for artist in self.artists:
-                        self.ax.lines.append(artist)
-            else:
-                for artist in self.artists:
-                    self.ax.lines.remove(artist)
-
-        if points:
-            # Add or remove the scatter points
-            if self.plot_cbox.isChecked():
-                if all([a in self.ax.collections for a in points]):  # If the points are already plotted, pass.
-                    pass
-                else:
-                    for artist in self.artists:
-                        self.ax.collections.append(artist)
-            else:
-                for artist in self.artists:
-                    self.ax.collections.remove(artist)
-
         self.plot_changed_sig.emit()
-
-    def update_channels(self, which):
-        """
-        Change the plotted channel range
-        :param which: str, which channel extreme was changed, min or max
-        """
-        self.min_ch.blockSignals(True)
-        self.max_ch.blockSignals(True)
-
-        min_ch = self.min_ch.value()
-        max_ch = self.max_ch.value()
-
-        if which == 'min':
-            if min_ch > max_ch:
-                self.max_ch.setValue(min_ch)
-
-        else:
-            if max_ch < min_ch:
-                self.min_ch.setValue(max_ch)
-
-        self.plot(alpha=None, color_by_channel=None)
-        self.plot_changed_sig.emit()  # Updates the legend and re-draws
-
-        # Re-scale the plots
-        self.ax.relim()
-        self.ax.autoscale()
-
-        self.min_ch.blockSignals(False)
-        self.max_ch.blockSignals(False)
 
 
 class MUNFile:
@@ -317,7 +162,7 @@ class MUNFile:
         data = data.astype(float)
 
         self.data = data
-        print(f"Parsed data from {self.filepath.name}:\n{data}")
+        # print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
 

@@ -2,6 +2,7 @@ import sys
 import os
 import pickle
 import io
+import re
 import numpy as np
 from pathlib import Path
 import matplotlib
@@ -20,7 +21,7 @@ from src.file_types.platef_file import PlateFFile, PlateFTab
 from src.file_types.mun_file import MUNFile, MUNTab
 from PyQt5 import (QtCore, QtGui, uic)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
-                             QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QCheckBox, QButtonGroup)
+                             QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QLineEdit, QButtonGroup)
 
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
@@ -270,7 +271,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         """Remove a tab"""
         # Find the tab when an index is passed (when a tab is closed)
         tab = self.file_tab_widget.widget(ind).widget()
-        tab.remove()
+        tab.clear()
         self.opened_files.pop(ind)
         self.file_tab_widget.removeTab(ind)
 
@@ -279,7 +280,6 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
 
     def update_legend(self):
         """Update the legend to be in alphabetical order"""
-
         for canvas, ax in zip(self.canvases, self.axes):
             if self.actionPlot_Legend.isChecked():
                 # Only sort if there are tabs, otherwise it crashes.
@@ -344,7 +344,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         # X Figure
         self.x_figure = Figure()
         self.x_ax = self.x_figure.add_subplot(111)
-        self.x_ax.set_title('X Component')
+        self.x_ax.set_ylabel('X Component Response\n()')
         self.x_ax.set_xlabel("Station")
         self.x_canvas = FigureCanvas(self.x_figure)
 
@@ -356,7 +356,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         # Y Figure
         self.y_figure = Figure()
         self.y_ax = self.y_figure.add_subplot(111)
-        self.y_ax.set_title('Y Component')
+        self.y_ax.set_ylabel('Y Component Response\n()')
         self.y_ax.set_xlabel("Station")
         self.y_canvas = FigureCanvas(self.y_figure)
 
@@ -368,7 +368,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         # Z Figure
         self.z_figure = Figure()
         self.z_ax = self.z_figure.add_subplot(111)
-        self.z_ax.set_title('Z Component')
+        self.z_ax.set_ylabel('Z Component Response\n()')
         self.z_ax.set_xlabel("Station")
         self.z_canvas = FigureCanvas(self.z_figure)
 
@@ -383,32 +383,50 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         # Status bar
         self.num_files_label = QLabel()
 
-        self.legend_box = QFrame()
-        self.legend_box.setLayout(QHBoxLayout())
-        self.legend_box.layout().setContentsMargins(0, 0, 0, 0)
-        self.color_by_line_cbox = QCheckBox("Color by Line")
-        self.color_by_channel_cbox = QCheckBox("Color by Channel")
-        self.legend_color_group = QButtonGroup()
-        self.legend_color_group.addButton(self.color_by_line_cbox)
-        self.legend_color_group.addButton(self.color_by_channel_cbox)
-        self.legend_box.layout().addWidget(self.color_by_line_cbox)
-        self.legend_box.layout().addWidget(self.color_by_channel_cbox)
-        self.color_by_line_cbox.setChecked(True)
+        self.title = QLineEdit()
+        self.title_box = QFrame()
+        self.title_box.setLayout(QHBoxLayout())
+        self.title_box.layout().setContentsMargins(0, 0, 0, 0)
+        self.title_box.layout().addWidget(QLabel("Plot Title:"))
+        self.title_box.layout().addWidget(self.title)
+
+        # self.legend_box = QFrame()
+        # self.legend_box.setLayout(QHBoxLayout())
+        # self.legend_box.layout().setContentsMargins(0, 0, 0, 0)
+        # self.color_by_line_cbox = QCheckBox("Color by Line")
+        # self.color_by_channel_cbox = QCheckBox("Color by Channel")
+        # self.legend_color_group = QButtonGroup()
+        # self.legend_color_group.addButton(self.color_by_line_cbox)
+        # self.legend_color_group.addButton(self.color_by_channel_cbox)
+        # self.legend_box.layout().addWidget(self.color_by_line_cbox)
+        # self.legend_box.layout().addWidget(self.color_by_channel_cbox)
+        # self.color_by_line_cbox.setChecked(True)
 
         self.statusBar().addPermanentWidget(self.num_files_label, 1)
-        self.statusBar().addPermanentWidget(self.legend_box)
+        self.statusBar().addPermanentWidget(self.title_box)
 
         # Signals
         self.actionOpen.triggered.connect(self.open_file_dialog)
         self.actionPrint_to_PDF.triggered.connect(self.print_pdf)
         self.actionPlot_Legend.triggered.connect(self.update_legend)
 
-        def replot():
-            for ind in range(self.file_tab_widget.count()):
-                tab = self.file_tab_widget.widget(ind).widget()
-                self.plot_tab(tab)
+        # def replot():
+        #     for ind in range(self.file_tab_widget.count()):
+        #         tab = self.file_tab_widget.widget(ind).widget()
+        #         self.plot_tab(tab)
+        #
+        # self.legend_color_group.buttonClicked.connect(replot)
 
-        self.legend_color_group.buttonClicked.connect(replot)
+        def update_title():
+            """Change the title of the plots"""
+            title = self.title.text()
+            for ax, canvas in zip(self.axes, self.canvases):
+                ax.set_title(title)
+
+                canvas.draw()
+                canvas.flush_events()
+
+        self.title.editingFinished.connect(update_title)
         self.file_tab_widget.tabCloseRequested.connect(self.remove_tab)
 
         self.update_num_files()
@@ -442,7 +460,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         for url in urls:
             self.open(url)
 
-    def print_pdf(self):
+    def print_pdf(self, filepath=None, start_file=True):
         """Resize the figure to 11 x 8.5" and save to a PDF file"""
 
         if not any([self.x_ax.lines, self.y_ax.lines, self.z_ax.lines]):
@@ -450,7 +468,8 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             print(f"The plots are empty.")
             return
 
-        filepath, ext = QFileDialog.getSaveFileName(self, 'Save PDF', '', "PDF Files (*.PDF);;All Files (*.*)")
+        if filepath is None:
+            filepath, ext = QFileDialog.getSaveFileName(self, 'Save PDF', '', "PDF Files (*.PDF);;All Files (*.*)")
 
         if filepath:
             with PdfPages(filepath) as pdf:
@@ -459,23 +478,14 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
                     # Only print the figure if there are plotted lines
                     if figure.axes[0].lines:
-                        # Create a copy of the figure
-                        # buf = io.BytesIO()
-                        # pickle.dump(figure, buf)
-                        # buf.seek(0)
-                        # save_figure = pickle.load(buf)
-
-                        # Resize and save the figure
-                        # save_figure.set_size_inches((11, 8.5))
-                        # pdf.savefig(save_figure, orientation='landscape')
-
                         old_size = figure.get_size_inches().copy()
                         figure.set_size_inches((11, 8.5))
                         pdf.savefig(figure, orientation='landscape')
                         figure.set_size_inches(old_size)
 
             self.statusBar().showMessage(f"PDF saved to {filepath}.", 1500)
-            os.startfile(filepath)
+            if start_file is True:
+                os.startfile(filepath)
 
     def open_file_dialog(self):
         """Open files through the file dialog"""
@@ -508,30 +518,30 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
 
         print(f"Opening {filepath.name}.")
 
-        try:
-            color = str(next(quant_colors))  # Cycles through colors
-        except StopIteration:
-            print(f"Resetting color iterator.")
-            quant_colors.reset()
-            color = str(next(quant_colors))
+        # try:
+        #     color = str(next(quant_colors))  # Cycles through colors
+        # except StopIteration:
+        #     print(f"Resetting color iterator.")
+        #     quant_colors.reset()
+        #     color = str(next(quant_colors))
 
         # Create a dict for which axes components get plotted on
         axes = {'X': self.x_ax, 'Y': self.y_ax, 'Z': self.z_ax}
 
         # Create a new tab and add it to the widget
         if ext == '.tem':
-            tab = TEMTab(parent=self, color=color, axes=axes)
+            tab = TEMTab(parent=self, axes=axes)
         elif ext == '.dat':
             first_line = open(filepath).readlines()[0]
             if 'Data type:' in first_line:
                 components = ("X", "Y", "Z")
                 component, ok_pressed = QInputDialog.getItem(self, "Choose Component", "Component:", components, 0, False)
                 if ok_pressed and component:
-                    tab = MUNTab(parent=self, color=color, axes=axes, component=component)
+                    tab = MUNTab(parent=self, axes=axes, component=component)
                 else:
                     return
             else:
-                tab = PlateFTab(parent=self, color=color, axes=axes)
+                tab = PlateFTab(parent=self, axes=axes)
         else:
             self.msg.showMessage(self, "Error", f"{ext} is not supported.")
             return
@@ -564,21 +574,18 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             ind = tab
             tab = self.file_tab_widget.widget(ind).widget()
 
-        tab.plot(color_by_channel=self.color_by_channel_cbox.isChecked())
+        tab.plot()
 
+        # Add the Y axis label
         for canvas, ax in zip(self.canvases, self.axes):
-            # Add the Y axis label
+            label = re.sub(r"\(.*\)", f"({tab.file.units})", ax.get_ylabel())
             if not ax.get_ylabel() or self.file_tab_widget.count() == 1:
-                ax.set_ylabel(tab.file.units)
+                ax.set_ylabel(label)
             else:
-                if ax.get_ylabel() != tab.file.units:
+                if ax.get_ylabel() != label:
                     print(f"Warning: The units for {tab.file.filepath.name} are different then the prior units.")
-                #     self.msg.warning(self, "Warning", f"The units for {tab.file.filepath.name} are"
-                #                                       f" different then the prior units.")
-
-            # Update the plot
-            canvas.draw()
-            canvas.flush_events()
+                    self.msg.warning(self, "Warning", f"The units for {tab.file.filepath.name} are"
+                                                      f" different then the prior units.")
 
         self.update_legend()
 
@@ -586,7 +593,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         """Remove a tab"""
         # Find the tab when an index is passed (when a tab is closed)
         tab = self.file_tab_widget.widget(ind).widget()
-        tab.remove()
+        tab.clear()
         self.opened_files.pop(ind)
         self.file_tab_widget.removeTab(ind)
 
@@ -624,29 +631,57 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             canvas.draw()
             canvas.flush_events()
 
-    # def update_alpha(self, alpha):
-    #     print(f"New alpha: {alpha / 100}")
-    #     for canvas, ax in zip(self.canvases, self.axes):
-    #
-    #         for artist in ax.lines:
-    #             artist.set_alpha(alpha / 100)
-    #
-    #         for artist in ax.collections:
-    #             artist.set_alpha(alpha / 100)
-    #
-    #         canvas.draw()
-    #         canvas.flush_events()
-    #
-    #     self.update_legend()
-
     def update_num_files(self):
         self.num_files_label.setText(f"{len(self.opened_files)} file(s) opened.")
 
 
 if __name__ == '__main__':
+    import time
     app = QApplication(sys.argv)
 
+    # fpl = FEMPlotter()
+    tpl = TEMPlotter()
+    tpl.show()
+
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
+
+    def auto_run_files():
+        t0 = time.time()
+        maxwell_files_folder = sample_files.joinpath(r"Aspect ratio test\Maxwell")
+        plate_files_folder = sample_files.joinpath(r"Aspect ratio test\PLATE")
+
+        maxwell_files = list(maxwell_files_folder.glob("*.TEM"))
+        plate_files = list(plate_files_folder.glob("*.DAT"))
+
+        assert len(maxwell_files) == len(plate_files), \
+            print(f"{len(maxwell_files)} Maxwell files vs {len(plate_files)} PLATE files found.")
+
+        results_folder = sample_files.joinpath(r"Aspect ratio test/Results")
+
+        for ind, (maxwell_file, plate_file) in enumerate(zip(maxwell_files, plate_files)):
+            print(f"Plotting files: {maxwell_file.name}, {plate_file.name} ({ind + 1}/{len(maxwell_files)})")
+            tpl.open(maxwell_file)
+            tpl.open(plate_file)
+
+            test_name = maxwell_file.stem
+
+            tpl.title.setText("Aspect Ratio Test")
+            tpl.title.editingFinished.emit()
+            tpl.file_tab_widget.widget(0).widget().scale_data_sbox.setValue(0.000001)
+            tpl.file_tab_widget.widget(0).widget().shift_stations_sbox.setValue(-400)
+            tpl.file_tab_widget.widget(0).widget().min_ch.setValue(21)
+            tpl.file_tab_widget.widget(0).widget().max_ch.setValue(44)
+
+            tpl.file_tab_widget.widget(0).widget().alpha_sbox.setValue(50)
+            # tpl.file_tab_widget.widget(1).widget().alpha_sbox.setValue(50)
+
+            pdf_path = results_folder.joinpath(test_name).with_suffix('.PDF')
+            tpl.print_pdf(filepath=pdf_path, start_file=False)
+
+            tpl.remove_tab(0)
+            tpl.remove_tab(0)
+
+        print(f"Script complete after {time.time() - t0:.0f}s.")
 
     # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
     # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_y.dat')
@@ -657,15 +692,16 @@ if __name__ == '__main__':
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\test Z.fem')
     # tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
     # tem_file = sample_files.joinpath(r'Maxwell files\TEM\50msec Impulse 100S BField.tem')
-    tem_file = sample_files.joinpath(r'Maxwell files\TEM\Test 6 - x1e3.tem')
+    # tem_file = sample_files.joinpath(r'Maxwell files\TEM\Test 6 - x1e3.tem')
+    tem_file = sample_files.joinpath(r'Aspect ratio test\Maxwell\5x150A.TEM')
 
-    # fpl = FEMPlotter()
     # fpl.show()
     # fpl.open(fem_file)
 
-    tpl = TEMPlotter()
-    tpl.show()
-    tpl.open(tem_file)
+    # tpl.show()
+    # tpl.open(tem_file)
     # tpl.print_pdf()
+
+    auto_run_files()
 
     app.exec_()

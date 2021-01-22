@@ -64,7 +64,7 @@ class FEMTab(QWidget):
         self.scale_data_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
         self.shift_stations_sbox.valueChanged.connect(self.plot)
         self.shift_stations_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
-        self.alpha_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
+        self.alpha_sbox.valueChanged.connect(lambda: self.plot)
         self.alpha_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
 
     def read(self, filepath):
@@ -124,10 +124,9 @@ class FEMTab(QWidget):
     def plot(self):
         """
         Plot the data on a mpl axes
-        :param alpha : float
         """
         # Remove existing plotted lines
-        self.remove()
+        self.clear()
 
         self.hcp_artists = []
         self.vca_artists = []
@@ -155,7 +154,7 @@ class FEMTab(QWidget):
                                         marker=style,
                                         s=size,
                                         alpha=self.alpha_sbox.value() / 100,
-                                        label=f"{freq} ({self.file.filepath.name})")
+                                        label=f"{freq} - {self.file.filepath.stem} (Maxwell)")
 
                 else:
                     style = '--' if 'Q' in freq else '-'
@@ -163,7 +162,7 @@ class FEMTab(QWidget):
                                       ls=style,
                                       color=self.color,
                                       alpha=self.alpha_sbox.value() / 100,
-                                      label=f"{freq} ({self.file.filepath.name})")
+                                      label=f"{freq} - {self.file.filepath.stem} (Maxwell)")
 
                 if component == 'HCP':
                     self.hcp_artists.append(artist)
@@ -195,7 +194,7 @@ class FEMTab(QWidget):
                                             color=self.color,
                                             marker=style,
                                             s=size,
-                                            alpha=alpha,
+                                            alpha=self.alpha_sbox.value() / 100,
                                             label=f"{freq} ({self.file.filepath.name})")
 
                     else:
@@ -203,7 +202,7 @@ class FEMTab(QWidget):
                         artist, = ax.plot(x, y,
                                           ls=style,
                                           color=self.color,
-                                          alpha=alpha,
+                                          alpha=self.alpha_sbox.value() / 100,
                                           label=f"{freq} ({self.file.filepath.name})")
 
                     if component == 'HCP':
@@ -213,7 +212,7 @@ class FEMTab(QWidget):
 
                     size += 10  # For scatter point size
 
-    def remove(self):
+    def clear(self):
         # Remove existing plotted lines
         for ls, ax in zip([self.hcp_artists, self.vca_artists], self.axes.values()):
             if ax.lines:

@@ -1,94 +1,19 @@
 import re
 from pathlib import Path
 
-import matplotlib
-from natsort import natsorted
 import pandas as pd
-import numpy as np
-from PyQt5 import QtCore, QtGui
-from PyQt5.QtWidgets import (QLabel, QFormLayout, QWidget, QCheckBox, QFrame, QHBoxLayout, QSpinBox, QDoubleSpinBox,
-                             QSizePolicy)
-from matplotlib.pyplot import cm
+from PyQt5.QtWidgets import (QLabel)
+from natsort import natsorted
+
+from src.file_types.base_tdem_file import BaseTDEM
 
 
-class TEMTab(QWidget):
-    plot_changed_sig = QtCore.pyqtSignal()
+class TEMTab(BaseTDEM):
 
-    def __init__(self, parent=None, color=None, axes=None):
-        super().__init__()
-        self.layout = QFormLayout()
-        self.setLayout(self.layout)
-
-        self.plot_cbox = QCheckBox("Plot")
-        self.plot_cbox.setFocusPolicy(QtCore.Qt.NoFocus)
-        self.plot_cbox.setChecked(True)
-
-        self.layout.addRow(self.plot_cbox)
-        self.layout.addRow("File Type", QLabel("Maxwell TEM"))
-
-        # Data editing
-        self.scale_data_sbox = QDoubleSpinBox()
-        self.scale_data_sbox.setValue(1.)
-        self.scale_data_sbox.setSingleStep(0.1)
-        self.scale_data_sbox.setMaximum(1e9)
-        self.scale_data_sbox.setMinimum(-1e9)
-        self.scale_data_sbox.setFixedWidth(100)
-        self.scale_data_sbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.layout.addRow("Scale Data", self.scale_data_sbox)
-
-        self.shift_stations_sbox = QDoubleSpinBox()
-        self.shift_stations_sbox.setMaximum(100000)
-        self.shift_stations_sbox.setMinimum(-100000)
-        self.shift_stations_sbox.setFixedWidth(100)
-        self.shift_stations_sbox.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.layout.addRow("Shift Stations", self.shift_stations_sbox)
-
-        self.alpha_sbox = QSpinBox()
-        self.alpha_sbox.setSingleStep(10)
-        self.alpha_sbox.setRange(0, 100)
-        self.alpha_sbox.setValue(100)
-        self.alpha_sbox.setSuffix('%')
-        self.alpha_sbox.setFixedWidth(100)
-        self.layout.addRow("Plot Alpha", self.alpha_sbox)
-
-        # Channel selection frame
-        self.ch_select_frame = QFrame()
-        self.ch_select_frame.setLayout(QHBoxLayout())
-        self.ch_select_frame.layout().setContentsMargins(0, 0, 0, 0)
-        self.ch_select_frame.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Maximum)
-        self.min_ch = QSpinBox()
-        self.max_ch = QSpinBox()
-        self.min_ch.setMinimum(1)
-        self.max_ch.setMinimum(1)
-        self.min_ch.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        self.max_ch.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        # self.ch_select_frame.layout().addWidget(QLabel("Plot Channels"))
-        self.ch_select_frame.layout().addWidget(self.min_ch)
-        self.ch_select_frame.layout().addWidget(QLabel("to"))
-        self.ch_select_frame.layout().addWidget(self.max_ch)
-
-        self.file = None
-        self.parent = parent
-        self.color = color
-        self.alpha = None  # Remember the last alpha
-        self.color_by_channel = False
-        self.axes = axes
-
-        self.x_artists = []
-        self.y_artists = []
-        self.z_artists = []
-        self.data = pd.DataFrame()
-
-        # Signals
-        self.plot_cbox.toggled.connect(self.toggle)
-        self.scale_data_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
-        self.scale_data_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
-        self.shift_stations_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
-        self.shift_stations_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
-        self.alpha_sbox.valueChanged.connect(lambda: self.plot(color_by_channel=self.color_by_channel))
-        self.alpha_sbox.valueChanged.connect(lambda: self.plot_changed_sig.emit())
-        self.min_ch.valueChanged.connect(lambda: self.update_channels("min"))
-        self.max_ch.valueChanged.connect(lambda: self.update_channels("max"))
+    def __init__(self, parent=None, axes=None):
+        super().__init__(parent=parent, axes=axes)
+        self.layout.insertRow(1, "File Type", QLabel("Maxwell TEM"))
+        self.color = 'b'
 
     def read(self, filepath):
         if not isinstance(filepath, Path):
@@ -113,7 +38,7 @@ class TEMTab(QWidget):
         self.layout.addRow('Configuration', QLabel(file.config))
         self.layout.addRow('Elevation', QLabel(str(file.elevation)))
         self.layout.addRow('Units', QLabel(file.units))
-        self.layout.addRow('Current', QLabel(str(file.current)))
+        self.layout.addRow('Current', QLabel(f"{float(file.current):,}"))
 
         self.layout.addRow('Rx Dipole', QLabel(str(file.rx_dipole)))
 
@@ -155,22 +80,15 @@ class TEMTab(QWidget):
 
         self.data = file.data
         self.file = file
+        self.legend_name.setText(f"{self.file.filepath.stem} (Maxwell)")
 
     def plot(self, color_by_channel=None):
         """
         Plot the data on a mpl axes
-        :param alpha: float
         :param color_by_channel: bool, color each channel a different color or color each line with self.color.
         """
         # Remove existing plotted lines
-        self.remove()
-
-        # Use the current legend coloring if none is passed
-        print(f"Color by channel: {color_by_channel}")
-        if color_by_channel is None:
-            color_by_channel = self.color_by_channel
-        else:
-            self.color_by_channel = color_by_channel
+        self.clear()
 
         self.x_artists = []
         self.y_artists = []
@@ -187,25 +105,14 @@ class TEMTab(QWidget):
                 continue
 
             size = 8  # For scatter point size
-
-            if color_by_channel is True:
-                rainbow_color = iter(cm.gist_rainbow(np.linspace(0, 1, len(plotting_channels))))
-
             ax = self.axes[component]
 
             for ind, ch in enumerate(plotting_channels):
                 # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
-                if color_by_channel is True:
-                    c = next(rainbow_color)  # Cycles through colors
-                    ch_num = int(re.search(r'\d+', ch).group(0)) - 1
-                    label = f"{ch} ({self.file.ch_times[ch_num]} ms)"
-                # If coloring by line, uses the tab's color, and the label is the file name.
+                if ind == 0:
+                    label = self.legend_name.text()
                 else:
-                    c = self.color
-                    if ind == 0:
-                        label = f"{self.file.filepath.name}"
-                    else:
-                        label = None
+                    label = None
 
                 x = comp_data.STATION.astype(float) + self.shift_stations_sbox.value()
                 y = comp_data.loc[:, ch].astype(float) * self.scale_data_sbox.value()
@@ -213,7 +120,7 @@ class TEMTab(QWidget):
                 if len(x) == 1:
                     style = 'o'
                     artist = ax.scatter(x, y,
-                                        color=c,
+                                        color=self.color,
                                         marker=style,
                                         s=size,
                                         alpha=self.alpha_sbox.value() / 100,
@@ -222,7 +129,7 @@ class TEMTab(QWidget):
                 else:
                     # style = '--' if 'Q' in freq else '-'
                     artist, = ax.plot(x, y,
-                                      color=c,
+                                      color=self.color,
                                       alpha=self.alpha_sbox.value() / 100,
                                       # lw=count / 100,
                                       label=label)
@@ -236,26 +143,14 @@ class TEMTab(QWidget):
 
                 size += 2
 
-    def plot_decay(self, alpha=None, color_by_channel=None):
+        self.plot_changed_sig.emit()
+
+    def plot_decay(self):
         """
         Plot the decay data on a mpl axes
-        :param alpha: float
-        :param color_by_channel: bool, color each channel a different color or color each line with self.color.
         """
         # Remove existing plotted lines
-        self.remove()
-
-        # Use the current alpha is none is passed
-        if alpha is None:
-            alpha = self.alpha
-        else:
-            self.alpha = alpha
-
-        # Use the current legend coloring if none is passed
-        if color_by_channel is None:
-            color_by_channel = self.color_by_channel
-        else:
-            self.color_by_channel = color_by_channel
+        self.clear()
 
         self.x_artists = []
         self.y_artists = []
@@ -273,24 +168,14 @@ class TEMTab(QWidget):
 
             size = 8  # For scatter point size
 
-            if color_by_channel is True:
-                rainbow_color = iter(cm.gist_rainbow(np.linspace(0, 1, len(plotting_channels))))
-
             ax = self.axes[component]
 
             for ind, ch in enumerate(plotting_channels):
                 # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
-                if color_by_channel is True:
-                    c = next(rainbow_color)  # Cycles through colors
-                    ch_num = int(re.search(r'\d+', ch).group(0)) - 1
-                    label = f"{ch} ({self.file.ch_times[ch_num]} ms)"
-                # If coloring by line, uses the tab's color, and the label is the file name.
+                if ind == 0:
+                    label = f"{self.file.filepath.stem} (Maxwell)"
                 else:
-                    c = self.color
-                    if ind == 0:
-                        label = f"{self.file.filepath.name}"
-                    else:
-                        label = None
+                    label = None
 
                 x = comp_data.STATION.astype(float)
                 y = comp_data.loc[:, ch].astype(float)
@@ -298,17 +183,17 @@ class TEMTab(QWidget):
                 if len(x) == 1:
                     style = 'o'
                     artist = ax.scatter(x, y,
-                                        color=c,
+                                        color=self.color,
                                         marker=style,
                                         s=size,
-                                        alpha=alpha,
+                                        alpha=self.alpha_sbox.value() / 100,
                                         label=label)
 
                 else:
                     # style = '--' if 'Q' in freq else '-'
                     artist, = ax.plot(x, y,
-                                      color=c,
-                                      alpha=alpha,
+                                      color=self.color,
+                                      alpha=self.alpha_sbox.value() / 100,
                                       # lw=count / 100,
                                       label=label)
 
@@ -321,85 +206,7 @@ class TEMTab(QWidget):
 
                 size += 2
 
-    def remove(self):
-        # Remove existing plotted lines
-        for ls, ax in zip([self.x_artists, self.y_artists, self.z_artists], self.axes.values()):
-            if ax.lines:
-                if all([artist in ax.lines for artist in ls]):
-                    for artist in ls:
-                        ax.lines.remove(artist)
-            if ax.collections:
-                if all([artist in ax.collections for artist in ls]):
-                    for artist in ls:
-                        ax.collections.remove(artist)
-
-    def toggle(self):
-        """Toggle the visibility of plotted lines/points"""
-        for ax in self.axes.values():
-            if ax == self.axes['X']:
-                artists = self.x_artists
-            elif ax == self.axes['Y']:
-                artists = self.y_artists
-            else:
-                artists = self.z_artists
-
-            lines = list(filter(lambda x: isinstance(x, matplotlib.lines.Line2D), artists))
-            points = list(filter(lambda x: isinstance(x, matplotlib.collections.PathCollection), artists))  # Scatters
-
-            if lines:
-                if self.plot_cbox.isChecked():
-                    if all([a in ax.lines for a in lines]):  # If the lines are already plotted, pass.
-                        pass
-                    else:
-                        for artist in artists:
-                            ax.lines.append(artist)
-                else:
-                    for artist in artists:
-                        ax.lines.remove(artist)
-
-            if points:
-                # Add or remove the scatter points
-                if self.plot_cbox.isChecked():
-                    if all([a in ax.collections for a in points]):  # If the points are already plotted, pass.
-                        pass
-                    else:
-                        for artist in artists:
-                            ax.collections.append(artist)
-                else:
-                    for artist in artists:
-                        ax.collections.remove(artist)
-
         self.plot_changed_sig.emit()
-
-    def update_channels(self, which):
-        """
-        Change the plotted channel range
-        :param which: str, which channel extreme was changed, min or max
-        """
-        self.min_ch.blockSignals(True)
-        self.max_ch.blockSignals(True)
-
-        min_ch = self.min_ch.value()
-        max_ch = self.max_ch.value()
-
-        if which == 'min':
-            if min_ch > max_ch:
-                self.max_ch.setValue(min_ch)
-
-        else:
-            if max_ch < min_ch:
-                self.min_ch.setValue(max_ch)
-
-        self.plot(alpha=None, color_by_channel=None)
-        self.plot_changed_sig.emit()  # Updates the legend and re-draws
-
-        self.min_ch.blockSignals(False)
-        self.max_ch.blockSignals(False)
-
-        for ax in self.axes.values():
-            # Re-scale the plots
-            ax.relim()
-            ax.autoscale()
 
 
 class TEMFile:
@@ -508,7 +315,7 @@ class TEMFile:
         self.ch_widths = ch_widths
         self.data = data
         self.components = list(self.data.COMPONENT.unique())
-        print(f"Parsed data from {self.filepath.name}:\n{data}")
+        # print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
 
