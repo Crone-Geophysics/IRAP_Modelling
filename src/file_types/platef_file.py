@@ -44,7 +44,10 @@ class PlateFTab(BaseTDEM):
             self.layout.addRow('Components', QLabel('\n'.join(natsorted(file.components))))
 
         self.layout.addRow(QLabel("Plot Channels"), self.ch_select_frame)
-        self.layout.addRow('Channel Times', QLabel((file.ch_times.astype(float) * 1000).to_string()))
+
+        channel_times = file.ch_times.astype(float) * 1000
+        channel_times.index += 1
+        self.layout.addRow('Channel Times', QLabel(channel_times.to_string()))
 
         # Set the channel range spin boxes
         self.min_ch.blockSignals(True)

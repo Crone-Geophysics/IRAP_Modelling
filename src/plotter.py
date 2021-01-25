@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
-from natsort import natsorted
+from natsort import natsorted, humansorted, os_sorted
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, \
     NavigationToolbar2QT as NavigationToolbar
@@ -21,23 +21,27 @@ from src.file_types.platef_file import PlateFFile, PlateFTab
 from src.file_types.mun_file import MUNFile, MUNTab
 from PyQt5 import (QtCore, QtGui, uic)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
-                             QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QLineEdit, QButtonGroup)
+                             QTableWidgetItem, QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QLineEdit,
+                             QProgressDialog, QWidget, QHeaderView)
 
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
     application_path = Path(sys.executable).parent
     FEMPlotterUIFile = Path('ui\\fem_plotter.ui')
     TEMPlotterUIFile = Path('ui\\tem_plotter.ui')
+    TestRunnerUIFile = Path('ui\\test_runner.ui')
     icons_path = Path('ui\\icons')
 else:
     application_path = Path(__file__).absolute().parent
     FEMPlotterUIFile = application_path.joinpath('ui\\fem_plotter.ui')
     TEMPlotterUIFile = application_path.joinpath('ui\\tem_plotter.ui')
+    TestRunnerUIFile = application_path.joinpath('ui\\test_runner.ui')
     icons_path = application_path.joinpath('ui\\icons')
 
 # Load Qt ui file into a class
 fem_plotterUI, _ = uic.loadUiType(FEMPlotterUIFile)
 tem_plotterUI, _ = uic.loadUiType(TEMPlotterUIFile)
+test_runnerUI, _ = uic.loadUiType(TestRunnerUIFile)
 
 matplotlib.use('Qt5Agg')
 rainbow_colors = iter(cm.rainbow(np.linspace(0, 1, 20)))
@@ -635,13 +639,140 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
         self.num_files_label.setText(f"{len(self.opened_files)} file(s) opened.")
 
 
+class TestRunner(QMainWindow, test_runnerUI):
+
+    def __init__(self):
+        super().__init__()
+        self.setupUi(self)
+        self.setAcceptDrops(True)
+        self.setWindowTitle("Test Runner v0.0")
+        self.resize(800, 600)
+        self.setWindowIcon(QtGui.QIcon(str(icons_path.joinpath('tem_plotter.png'))))
+        self.err_msg = QErrorMessage()
+        self.msg = QMessageBox()
+        self.opened_files = []
+
+        # Set the first column to stretch
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
+        self.remove_column = 7
+
+        def change_pdf_path():
+            filepath, ext = QFileDialog.getSaveFileName(self, 'Save PDF', '', "PDF Files (*.PDF)")
+            self.pdf_filepath_edit.setText(str(Path(filepath).with_suffix(".PDF")))
+
+        # Signals
+        self.add_folder_btn.clicked.connect(self.add_row)
+        self.change_pdf_path_btn.clicked.connect(change_pdf_path)
+        self.table.cellClicked.connect(self.cell_clicked)
+
+    def cell_clicked(self, row, col):
+        print(f"Row {row}, column {col} clicked.")
+
+        if col == self.remove_column:
+            print(f"Removing row {row}.")
+            self.table.removeRow(row)
+            self.opened_files.pop(row)
+            print(f"New opened files: {self.opened_files}")
+
+    def add_row(self, folderpath=None):
+        """Add a row to the table"""
+        # File type options with extensions
+        options = {"Maxwell": "*.TEM", "MUN": "*.DAT", "Peter": "*.XYZ", "PLATE": "*.DAT"}
+
+        # Don't include filetypes that are already selected
+        existing_filetypes = [self.table.item(row, 1).text() for row in range(self.table.rowCount())]
+        for file_type in existing_filetypes:
+            print(f"{file_type} already opened, removing from options.")
+            del options[file_type]
+            print(f"New options: {options}")
+
+        # Don't add any  more rows if all file types have been selected
+        if len(options) == 0:
+            self.msg.information(self, "Maximum File Types Reached",
+                                 "The maximum number of file types has been reached.")
+            return
+
+        if not folderpath:
+            folderpath = QFileDialog.getExistingDirectory(self, "Select Folder", "")
+
+        if Path(folderpath).is_dir():
+            file_type, ok_pressed = QInputDialog.getItem(self, "Select File Type", "File Type:",
+                                                         options.keys(), 0, False)
+
+            if ok_pressed and file_type:
+                row = self.table.rowCount()
+                self.table.insertRow(row)
+
+                ext = options[file_type]
+                files = list(Path(folderpath).glob(ext))
+                self.opened_files.append({file_type: files})
+
+                # Create default items for each column
+                path_item = QTableWidgetItem(folderpath)
+                path_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                file_type_item = QTableWidgetItem(file_type)
+                file_type_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
+                data_scaling = QTableWidgetItem("1.0")
+                station_shift = QTableWidgetItem("0")
+                start_ch = QTableWidgetItem("1")
+                end_ch = QTableWidgetItem("99")
+                files_found = QTableWidgetItem(str(len(files)))
+
+                for col, item in enumerate([path_item, file_type_item, data_scaling, station_shift, start_ch, end_ch,
+                                            files_found]):
+                    item.setTextAlignment(QtCore.Qt.AlignCenter)
+                    self.table.setItem(row, col, item)
+
+                # Add the remove button
+                """ To have an icon in the center of the cell, need to create a label and place it in a widget and 
+                center the layout of the widget."""
+                remove_btn_widget = QWidget()
+                remove_btn_widget.setLayout(QHBoxLayout())
+
+                remove_btn = QLabel()
+                remove_btn.setMaximumSize(QtCore.QSize(16, 16))
+                remove_btn.setScaledContents(True)
+                remove_btn.setPixmap(QtGui.QPixmap(str(icons_path.joinpath('remove.png'))))
+
+                remove_btn_widget.layout().setContentsMargins(0, 0, 0, 0)
+                remove_btn_widget.layout().setAlignment(QtCore.Qt.AlignHCenter)
+                remove_btn_widget.layout().addWidget(remove_btn)
+
+                self.table.setCellWidget(row, self.remove_column, remove_btn_widget)
+
+        else:
+            self.msg.warning(self, "Error", f"{folderpath} does not exist.")
+            return
+
+    def print_pdf(self):
+        """Create the PDF"""
+        # Make sure the number of files found for each filetype is the same
+        equal_num_files = all([self.table.item(row, 6).text() == self.table.item(0, 6).text()
+                               for row in range(self.table.rowCount())])
+        if equal_num_files is False:
+            self.msg.critical(self, "Error", "Each file type must have equal number of files.")
+            return
+
+        t0 = time.time()
+
+        files = zip()
+
+        progress = QProgressDialog("Processing...", "Cancel", 0, len(files))
+        progress.setWindowModality(QtCore.Qt.WindowModal)
+        progress.setWindowTitle("Processing IRAP Files")
+
+
 if __name__ == '__main__':
     import time
+    import pandas as pd
+
     app = QApplication(sys.argv)
 
     # fpl = FEMPlotter()
-    tpl = TEMPlotter()
-    tpl.show()
+    # fpl.show()
+    # tpl = TEMPlotter()
+    # tpl.show()
 
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
 
@@ -650,38 +781,61 @@ if __name__ == '__main__':
         maxwell_files_folder = sample_files.joinpath(r"Aspect ratio test\Maxwell")
         plate_files_folder = sample_files.joinpath(r"Aspect ratio test\PLATE")
 
-        maxwell_files = list(maxwell_files_folder.glob("*.TEM"))
-        plate_files = list(plate_files_folder.glob("*.DAT"))
+        maxwell_files = os_sorted(maxwell_files_folder.glob("*.TEM"))
+        plate_files = os_sorted(plate_files_folder.glob("*.DAT"))
 
         assert len(maxwell_files) == len(plate_files), \
             print(f"{len(maxwell_files)} Maxwell files vs {len(plate_files)} PLATE files found.")
 
-        results_folder = sample_files.joinpath(r"Aspect ratio test/Results")
+        results_pdf = sample_files.joinpath(r"Aspect ratio test/Aspect Ratio Test.pdf")
 
-        for ind, (maxwell_file, plate_file) in enumerate(zip(maxwell_files, plate_files)):
-            print(f"Plotting files: {maxwell_file.name}, {plate_file.name} ({ind + 1}/{len(maxwell_files)})")
-            tpl.open(maxwell_file)
-            tpl.open(plate_file)
+        files = list(zip(maxwell_files, plate_files))[:]
+        filepath, ext = QFileDialog.getSaveFileName(None, 'Save PDF', str(results_pdf),
+                                                    "PDF Files (*.PDF);;All Files (*.*)")
 
-            test_name = maxwell_file.stem
+        with PdfPages(filepath) as pdf:
+            progress = QProgressDialog("Processing...", "Cancel", 0, len(files))
+            progress.setWindowModality(QtCore.Qt.WindowModal)
+            progress.setWindowTitle("Processing IRAP Files")
 
-            tpl.title.setText("Aspect Ratio Test")
-            tpl.title.editingFinished.emit()
-            tpl.file_tab_widget.widget(0).widget().scale_data_sbox.setValue(0.000001)
-            tpl.file_tab_widget.widget(0).widget().shift_stations_sbox.setValue(-400)
-            tpl.file_tab_widget.widget(0).widget().min_ch.setValue(21)
-            tpl.file_tab_widget.widget(0).widget().max_ch.setValue(44)
+            for ind, (maxwell_file, plate_file) in enumerate(files):
+                if progress.wasCanceled():
+                    break
+                progress.setValue(ind)
+                print(f"Plotting files: {maxwell_file.name}, {plate_file.name} ({ind + 1}/{len(files)})")
+                tpl.open(maxwell_file)
+                tpl.open(plate_file)
 
-            tpl.file_tab_widget.widget(0).widget().alpha_sbox.setValue(50)
-            # tpl.file_tab_widget.widget(1).widget().alpha_sbox.setValue(50)
+                # df = pd.DataFrame(zip(tpl.file_tab_widget.widget(0).widget().file.ch_times[20:44], tpl.file_tab_widget.widget(
+                #     1).widget().file.ch_times * 1000), columns=['Maxwell', 'PLATE'], dtype=float)
+                #
+                # df['Difference'] = df.Maxwell - df.PLATE
 
-            pdf_path = results_folder.joinpath(test_name).with_suffix('.PDF')
-            tpl.print_pdf(filepath=pdf_path, start_file=False)
+                tpl.title.setText("Aspect Ratio Test")
+                tpl.title.editingFinished.emit()
+                tpl.file_tab_widget.widget(0).widget().scale_data_sbox.setValue(0.000001)
+                tpl.file_tab_widget.widget(0).widget().shift_stations_sbox.setValue(-400)
+                tpl.file_tab_widget.widget(0).widget().min_ch.setValue(21)
+                tpl.file_tab_widget.widget(0).widget().max_ch.setValue(44)
 
-            tpl.remove_tab(0)
-            tpl.remove_tab(0)
+                tpl.file_tab_widget.widget(0).widget().alpha_sbox.setValue(50)
 
-        print(f"Script complete after {time.time() - t0:.0f}s.")
+                # Print every figure as a PDF page
+                for figure in [tpl.x_figure, tpl.y_figure, tpl.z_figure]:
+
+                    # Only print the figure if there are plotted lines
+                    if figure.axes[0].lines:
+                        old_size = figure.get_size_inches().copy()
+                        figure.set_size_inches((11, 8.5))
+                        # figure.axes[0].set_xlim([0, 200])
+                        pdf.savefig(figure, orientation='landscape')
+                        figure.set_size_inches(old_size)
+
+                tpl.remove_tab(0)
+                tpl.remove_tab(0)
+
+        print(f"Script complete after {(time.time() - t0) / 60:.0f}min {(time.time() - t0) % 60:.0f}s.")
+        os.startfile(filepath)
 
     # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
     # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_y.dat')
@@ -702,6 +856,12 @@ if __name__ == '__main__':
     # tpl.open(tem_file)
     # tpl.print_pdf()
 
-    auto_run_files()
+    # auto_run_files()
+    tester = TestRunner()
+    tester.show()
+    # tester.pdf_filepath_edit.setText(r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\test.pdf")
+    # tester.add_row(folderpath=r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\Maxwell")
+    # tester.add_row(folderpath=r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\PLATE")
+    # tester.print_pdf()
 
     app.exec_()
