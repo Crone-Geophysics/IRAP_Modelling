@@ -1,0 +1,288 @@
+MAXWELL CONFIGURATION FILE: 17
+--------------------
+CONFIGURATION
+Configuration Types      : 1=Coincident Loop, 2=Downhole, 3=Fixed Loop, 4=In-loop, 5=Slingram, 6=Airborne, 8=Downhole dipole-dipole and 7=Other
+Configuration            : 3
+Airborne Types           : 0=Towed Bird, 1=Separated Coils, 2=In-loop, 3=Wingtip
+Airborne Type            : 0
+--------------------
+TRANSMITTER
+Transmitter Name         : 
+Transmitter Dipole       : NO
+Tx Area Constant         : YES
+Tx Area (m^2)            : 160000
+Tx Side Constant (Along) : YES
+Tx Side Along Line (m)   : 400
+Tx Side Constant (Across): YES
+Tx Side Across Line (m)  : 400
+Tx Turns Constant        : YES
+Tx Turns                 : 1
+Tx Moment Constant       : YES
+Tx Moment (turn-m)       : 10000
+Tx Current Constant      : YES
+Tx Current (A)           : 30
+Tx Elevation Constant    : NONE
+Adjust Tx for Terrain    : NO
+Tx Direction Types       : 0=Z, 1=X, 2=Y Component
+TD Slingram Tx Direction : 0
+--------------------
+TX-RX SEPARATION
+Along Line Constant      : YES
+Along Line Separation (m): 0
+Across Line Constant     : YES
+Across Line Separation (m): 0
+Vertical Constant        : YES
+Vertical Separation (m)  : 0
+Parallax                 : NONE
+--------------------
+RECEIVER
+Receiver Name            : 
+Receiver Coil Name       : 
+B Field response         : NO
+Receiver Dipole          : YES
+Rx Elevation Constant    : NONE
+Rx Side Constant         : YES
+Rx Side (m) (Along)      : 100
+Rx SideAcross Constant   : NONE
+Rx Turns Constant        : YES
+Rx Turns                 : 1
+Adjust Rx for Terrain    : NO
+Rx Direction Types       : 0=Z, 1=X, 2=Y Component
+TD Slingram Rx Direction : 0
+Dipole Direction Types   : 0=X and Y components +ve to East and North, 1=X and Y components +ve in line direction
+Dipole Direction         : 0
+Airborne Reverse Rx Components?
+Z Component              : NO
+X Component              : NO
+Y Component              : NO
+Rx Area Z Component      : 4000.000
+Rx Area X Component      : 4000.000
+Rx Area Y Component      : 4000.000
+Rx Area A Component      : 10000.000
+Rx Area U Component      : 10000.000
+Rx Area V Component      : 10000.000
+Rx Area HCP Component    : 10000.000
+Rx Area VCA Component    : 10000.000
+Rx Area VCP Component    : 10000.000
+--------------------
+UNITS
+Unit Types               : 0=mV, 1=uV, 2=nV, 3=pV, 4=nT, 5=pT, 6=fT, 7=ppmHp, 8=%Ht, 9=nT/s, 10=pT/s, 11=ppmHt, 12=pptHp, 13=pptHt, 14=ppmHx, 15=ppmHz, 16=pptHx, 17=pptHz
+Units                    : 9
+Normalise by Rx Area     : NO
+Normalise by Tx Area     : NO
+Normalise by Tx Current  : NO
+--------------------
+COMPONENTS
+No. of Components        : 3
+Z Component              : YES
+X Component              : YES
+Y Component              : YES
+A Component              : NO
+U Component              : NO
+V Component              : NO
+HCP Component            : NO
+VCA Component            : NO
+VCP Component            : NO
+--------------------
+TRANSMITTER LOOP, DIPOLE
+Use Loop / Dipole        : YES
+Transmitter Name         : Loop 1
+Loop Transmitter         : YES
+No. of Loop vertices     : 4
+1   10000 10200 0
+2   10400 10200 0
+3   10400 9800 0
+4   10000 9800 0
+END OF TRANSMITTER LOOP
+--------------------
+CHANNEL TIMES / FREQUENCIES
+Time Domain              : YES
+Number of channels       : 68
+--------------------
+START OF CHANNEL TIMES
+Ch  Start Time (s) End Time(s)
+1   -0.002000000000 -0.001900000000
+2   -0.001900000000 -0.001800000000
+3   -0.001800000000 -0.001700000000
+4   -0.001700000000 -0.001600000000
+5   -0.001600000000 -0.001500000000
+6   -0.001500000000 -0.001400000000
+7   -0.001400000000 -0.001300000000
+8   -0.001300000000 -0.001200000000
+9   -0.001200000000 -0.001100000000
+10  -0.001100000000 -0.001000000000
+11  -0.001000000000 -0.000900000000
+12  -0.000900000000 -0.000800000000
+13  -0.000800000000 -0.000700000000
+14  -0.000700000000 -0.000600000000
+15  -0.000600000000 -0.000500000000
+16  -0.000500000000 -0.000400000000
+17  -0.000400000000 -0.000300000000
+18  -0.000300000000 -0.000200000000
+19  -0.000200000000 -0.000100000000
+20  -0.000100000000 0.000000000000
+21  0.000000000000 0.000050000000
+22  0.000050000000 0.000060000000
+23  0.000060000000 0.000080000000
+24  0.000080000000 0.000110000000
+25  0.000110000000 0.000150000000
+26  0.000150000000 0.000200000000
+27  0.000200000000 0.000270000000
+28  0.000270000000 0.000360000000
+29  0.000360000000 0.000480000000
+30  0.000480000000 0.000640000000
+31  0.000640000000 0.000850000000
+32  0.000850000000 0.001130000000
+33  0.001130000000 0.001500000000
+34  0.001500000000 0.001990000000
+35  0.001990000000 0.002640000000
+36  0.002640000000 0.003510000000
+37  0.003510000000 0.004660000000
+38  0.004660000000 0.006190000000
+39  0.006190000000 0.008220000000
+40  0.008220000000 0.010920000000
+41  0.010920000000 0.014400000000
+42  0.014400000000 0.031060000000
+43  0.031060000000 0.047730000000
+44  0.047730000000 0.048500000000
+45  0.048500000000 0.048550000000
+46  0.048550000000 0.048560000000
+47  0.048560000000 0.048580000000
+48  0.048580000000 0.048610000000
+49  0.048610000000 0.048650000000
+50  0.048650000000 0.048700000000
+51  0.048700000000 0.048770000000
+52  0.048770000000 0.048860000000
+53  0.048860000000 0.048980000000
+54  0.048980000000 0.049140000000
+55  0.049140000000 0.049350000000
+56  0.049350000000 0.049630000000
+57  0.049630000000 0.050000000000
+58  0.050000000000 0.050490000000
+59  0.050490000000 0.051140000000
+60  0.051140000000 0.052010000000
+61  0.052010000000 0.053160000000
+62  0.053160000000 0.054690000000
+63  0.054690000000 0.056720000000
+64  0.056720000000 0.059420000000
+65  0.059420000000 0.062900000000
+66  0.062900000000 0.079560000000
+67  0.079560000000 0.096230000000
+68  0.096230000000 0.098000000000
+END OF CHANNEL TIMES
+--------------------
+PRIMARY FIELD NORMALISATION
+Normalisation Types      : 0=None, 1=Continuous, 2=Point
+Normalisation Type       : 0
+Point Norm. East (m)     : 0
+Point Norm. North (m)    : 0
+Point Norm. RL (m)       : 0
+--------------------
+PRIMARY FIELD
+Primary Field                 : YES
+Theoretical Total Column      : 
+Theoretical Component Column  : 
+Theoretical Units             : 
+Measured Total Column         : 
+Measured Component Column     : 
+Primary Removed Types         : 1=UTEM, 2=YES, 3=NO
+Primary Removed Type          : 2
+UTEM Ref Column               : 
+--------------------
+STANDARD WAVEFORM
+Use Standard Waveform    : YES
+Waveform Types           : 1=Periodic Rectangle, 2=UTEM, 3=Single Step, 4=Unused, 5=Half Sine, 6=Crone Step, 7=Aerotem
+Waveform Type            : 1
+Base Frequency (Hz)      : 5.00000000
+On Time (s)              : 0.05000000
+Off Time (s)             : 0.05000000
+Turn On (s)              : 0.00000000
+Turn Off (s)             : 0.00150000
+Timing Mark (s)          : 0.05150000
+No. of waveform points   : 5
+--------------------
+START OF STANDARD WAVEFORM
+Pt  Time (s)       Amplitude (A)
+1   0.00000000 0.00000000
+2   0.00000000 1.00000000
+3   0.05000000 1.00000000
+4   0.05150000 0.00000000
+5   0.10000000 0.00000000
+END OF STANDARD WAVEFORM
+--------------------
+DIGITAL WAVEFORM
+Use Digital Waveform     : YES
+Waveform Types           : 0=TxCurrent, 1=Inline dBdt, 2=Inline B, 3=Vertical dBdt, 4=Vertical B
+Waveform Type            : 0
+No. of waveform points   : 55
+--------------------
+START OF DIGITAL WAVEFORM
+Pt  Time (s)       Amplitude (A)
+1   0.00000000 0.00000000
+2   0.00010000 0.09516258
+3   0.00020000 0.18126925
+4   0.00030000 0.25918178
+5   0.00040000 0.32967995
+6   0.00050000 0.39346934
+7   0.00060000 0.45118836
+8   0.00070000 0.50341470
+9   0.00080000 0.55067104
+10  0.00090000 0.59343034
+11  0.00100000 0.63212056
+12  0.00110000 0.66712892
+13  0.00120000 0.69880579
+14  0.00130000 0.72746821
+15  0.00140000 0.75340304
+16  0.00150000 0.77686984
+17  0.00160000 0.79810348
+18  0.00170000 0.81731648
+19  0.00180000 0.83470111
+20  0.00190000 0.85043138
+21  0.00200000 0.86466472
+22  0.00210000 0.87754357
+23  0.00220000 0.88919684
+24  0.00230000 0.89974116
+25  0.00240000 0.90928205
+26  0.00250000 0.91791500
+27  0.00260000 0.92572642
+28  0.00270000 0.93279449
+29  0.00280000 0.93918994
+30  0.00290000 0.94497678
+31  0.00300000 0.95021293
+32  0.00310000 0.95495080
+33  0.00320000 0.95923780
+34  0.00330000 0.96311683
+35  0.00340000 0.96662673
+36  0.00350000 0.96980262
+37  0.00360000 0.97267628
+38  0.00370000 0.97527647
+39  0.00380000 0.97762923
+40  0.00390000 0.97975809
+41  0.00400000 0.98168436
+42  0.00410000 0.98342732
+43  0.00420000 0.98500442
+44  0.00430000 0.98643144
+45  0.00440000 0.98772266
+46  0.00450000 0.98889100
+47  0.00460000 0.98994816
+48  0.00470000 0.99090472
+49  0.00480000 0.99177025
+50  0.00490000 0.99255342
+51  0.00500000 0.99326205
+52  0.00510000 1.00000000
+53  0.05000000 1.00000000
+54  0.05150000 0.00000000
+55  0.10000000 0.00000000
+END OF DIGITAL WAVEFORM
+--------------------
+COMPONENTS BY FREQUENCY
+Components by Frequency  : NO
+--------------------
+SEPARATIONS BY FREQUENCY
+Separations by Frequency : NO
+--------------------
+MOMENT BY FREQUENCY
+Moment by Frequency      : NO
+--------------------
+FEM DATA FLOORS
+FEM Data Floors          : NO

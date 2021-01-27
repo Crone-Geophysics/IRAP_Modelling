@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (QLabel)
 
-from src.file_types.base_tdem_file import BaseTDEM
+from src.file_types.base_tdem_widget import BaseTDEM
 
 
 class MUNTab(BaseTDEM):
@@ -41,8 +41,8 @@ class MUNTab(BaseTDEM):
 
         self.layout.addRow(QLabel("Plot Channels"), self.ch_select_frame)
         # Create a data frame with channel times and channel widths
-        file.ch_times.index += 1
         file.ch_times.name = 'Times'
+        file.ch_times.index += 1
         self.layout.addRow('Channel Times', QLabel(file.ch_times.to_string()))
 
         # Set the channel range spin boxes

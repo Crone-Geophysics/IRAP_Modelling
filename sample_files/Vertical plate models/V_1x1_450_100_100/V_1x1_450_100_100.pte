@@ -1,0 +1,51 @@
+MAXWELL PLATE FILE : 2
+TOTAL PLATES  : 1
+****************************
+PLATE         : 31
+Name          : V_1x1_450_100_100
+Use           : YES
+Thick Plate   : NO
+Flat Top      : NO
+Attach to Tx. : NO
+East          : 10450.0000
+North         : 10000.0000
+Level         : -100.0000
+Dip           : 90.0000
+Dip Direction : 270.0000
+Plunge        : 0.0000
+Length        : 100.0000
+Depth Extent  : 100.0000
+c-t           : 100.0000
+Conductivity  : -1e33
+Thickness     : -1e33
+Skew          : 1.0000
+Ribbons       : 10
+INVERT ON PARAMETERS?
+East          : YES
+North         : NO
+Level         : YES
+Dip           : YES
+Dip Direction : NO
+Plunge        : NO
+Length        : NO
+Depth Extent  : YES
+c-t           : YES
+Conductivity  : YES
+Thickness     : YES
+Inv. Start Ch.: 1
+Inv. End Ch.  : 100
+COLE-COLE PARAMETERS
+Use Cole-Cole : NO
+C-C Tau       : 0.1000
+C-C m         : 0.1000
+C-C c         : 0.2500
+PLATE BORDER
+Line Thick.   : 0.20
+Line Style    : 0
+RIBBONS
+Line Thick.   : 0.10
+Line Style    : 1
+PLATE COLOUR
+Colour Red    : 255
+Colour Green  : 0
+Colour Blue   : 0

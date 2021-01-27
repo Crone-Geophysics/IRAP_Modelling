@@ -5,7 +5,7 @@ import pandas as pd
 from PyQt5.QtWidgets import (QLabel)
 from natsort import natsorted
 
-from src.file_types.base_tdem_file import BaseTDEM
+from src.file_types.base_tdem_widget import BaseTDEM
 
 
 class PlateFTab(BaseTDEM):

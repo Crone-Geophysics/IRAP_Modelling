@@ -1,11 +1,12 @@
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (QLabel)
 from natsort import natsorted
 
-from src.file_types.base_tdem_file import BaseTDEM
+from src.file_types.base_tdem_widget import BaseTDEM
 
 
 class TEMTab(BaseTDEM):
@@ -278,8 +279,8 @@ class TEMFile:
             self.loop_coords = loop_coords
 
         # Channel times and widths
-        ch_times = content.split(r'/TIMES(')[1].split('\n')[0][4:].split(',')
-        ch_widths = content.split(r'/TIMESWIDTH(')[1].split('\n')[0][4:].split(',')
+        ch_times = np.array(content.split(r'/TIMES(')[1].split('\n')[0][4:].split(','), dtype=float)
+        ch_widths = np.array(content.split(r'/TIMESWIDTH(')[1].split('\n')[0][4:].split(','), dtype=float)
 
         # Data
         top_section, data_section = content.split(r'/PROFILEX:')
