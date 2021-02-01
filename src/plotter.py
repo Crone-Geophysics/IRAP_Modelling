@@ -676,6 +676,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         self.add_folder_btn.clicked.connect(self.add_row)
         self.change_pdf_path_btn.clicked.connect(change_pdf_path)
         self.table.cellClicked.connect(self.cell_clicked)
+        self.include_edit.editingFinished.connect(self.filter_files)
         self.print_pdf_btn.clicked.connect(self.print_pdf)
 
     def cell_clicked(self, row, col):
@@ -706,7 +707,12 @@ class TestRunner(QMainWindow, test_runnerUI):
             return
 
         if not folderpath:
-            folderpath = QFileDialog.getExistingDirectory(self, "Select Folder", "")
+            folderpath = QFileDialog().getExistingDirectory(self, "Select Folder", "",
+                                                            QFileDialog.DontUseNativeDialog)
+
+            if not folderpath:
+                print(f"No folder chosen.")
+                return
 
         if Path(folderpath).is_dir():
             # Prompt a file type if none is given
@@ -719,15 +725,6 @@ class TestRunner(QMainWindow, test_runnerUI):
             row = self.table.rowCount()
             self.table.insertRow(row)
 
-            ext = options[file_type]
-            files = list(Path(folderpath).glob(ext))
-
-            # Filter the list of files is there is a filter in place
-            if self.include_edit.text():
-                files = [f for f in files if any([string in str(f) for string in [self.include_edit.text().split()]])]
-
-            self.opened_files.append(files)
-
             # Create default items for each column
             path_item = QTableWidgetItem(folderpath)
             path_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
@@ -738,10 +735,9 @@ class TestRunner(QMainWindow, test_runnerUI):
             start_ch = QTableWidgetItem("1")
             end_ch = QTableWidgetItem("99")
             alpha = QTableWidgetItem("1.0")
-            files_found = QTableWidgetItem(str(len(files)))
 
             for col, item in enumerate([path_item, file_type_item, data_scaling, station_shift, start_ch, end_ch,
-                                        alpha, files_found]):
+                                        alpha]):
                 item.setTextAlignment(QtCore.Qt.AlignCenter)
                 self.table.setItem(row, col, item)
 
@@ -761,12 +757,47 @@ class TestRunner(QMainWindow, test_runnerUI):
             remove_btn_widget.layout().addWidget(remove_btn)
 
             self.table.setCellWidget(row, self.header_labels.index('Remove'), remove_btn_widget)
-
+            self.filter_files()
         else:
             self.msg.information(self, "Error", f"{folderpath} does not exist.")
             return
 
-    def plot_maxwell(self, filepath, component):
+    def filter_files(self):
+        """ Filter the list of files is there is a filter in place"""
+        print(f"Filtering files.")
+        self.opened_files = []
+        options = {"Maxwell": "*.TEM", "MUN": "*.DAT", "Peter": "*.XYZ", "PLATE": "*.DAT"}
+        folderpath_col = self.header_labels.index('Folder')
+        file_type_col = self.header_labels.index('File Type')
+        files_found_col = self.header_labels.index('Files Found')
+
+        for row in range(self.table.rowCount()):
+
+            # Find all the files
+            file_type = self.table.item(row, file_type_col).text()
+            ext = options[file_type]
+            files = os_sorted(list(Path(self.table.item(row, folderpath_col).text()).glob(ext)))
+
+            # Filter the files
+            if self.include_edit.text():
+                files = [f for f in files if all(
+                    [string.strip() in str(f.stem) for string in self.include_edit.text().split(",")])
+                         ]
+
+            # Update number of files found in the table
+            files_found_item = QTableWidgetItem(str(len(files)))
+            files_found_item.setTextAlignment(QtCore.Qt.AlignCenter)
+            self.table.setItem(row, files_found_col, files_found_item)
+
+            self.opened_files.append(files)
+
+    def plot_maxwell(self, filepath, component, station=None):
+        """
+        Plot a Maxwell TEM file
+        :param filepath: Path object
+        :param component: Str, either X, Y, or Z.
+        :param station: float, if given it will plot a decay instead of a profile.
+        """
         # try:
         parser = TEMFile()
         file = parser.parse(filepath)
@@ -785,49 +816,99 @@ class TestRunner(QMainWindow, test_runnerUI):
                                                           f"the existing units ({file.units} vs {self.units})")
 
         channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
-        min_ch = properties['ch_start'] - 1
-        max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
-        plotting_channels = channels[min_ch: max_ch]
 
-        comp_data = file.data[file.data.COMPONENT == component]
+        if station is None:
+            min_ch = properties['ch_start'] - 1
+            max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
+            plotting_channels = channels[min_ch: max_ch + 1]
 
-        if comp_data.empty:
-            print(f"No {component} data in {file.filepath.name}.")
-            return
+            comp_data = file.data[file.data.COMPONENT == component]
 
-        size = 8  # For scatter point size
+            if comp_data.empty:
+                print(f"No {component} data in {file.filepath.name}.")
+                return
 
-        for ind, ch in enumerate(plotting_channels):
-            if ind == 0:
-                label = f"{file.filepath.stem} (Maxwell)"
+            size = 8  # For scatter point size
 
-                self.footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
-                    f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
-            else:
-                label = None
+            for ind, ch in enumerate(plotting_channels):
+                if ind == 0:
+                    label = f"{file.filepath.stem} (Maxwell)"
 
-            x = comp_data.STATION.astype(float) + properties['station_shift']
-            y = comp_data.loc[:, ch].astype(float) * properties['scaling']
+                    if min_ch == max_ch:
+                        self.footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
+                    else:
+                        self.footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
+                            f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
+                else:
+                    label = None
 
-            if len(x) == 1:
-                style = 'o'
-                self.ax.scatter(x, y,
-                                color=color,
-                                marker=style,
-                                s=size,
-                                alpha=properties['alpha'],
-                                label=label,
-                                zorder=1)
+                x = comp_data.STATION.astype(float) + properties['station_shift']
+                y = comp_data.loc[:, ch].astype(float) * properties['scaling']
 
-            else:
-                # style = '--' if 'Q' in freq else '-'
-                self.ax.plot(x, y,
-                             color=color,
-                             alpha=properties['alpha'],
-                             label=label,
-                             zorder=1)
+                if len(x) == 1:
+                    style = 'o'
+                    self.ax.scatter(x, y,
+                                    color=color,
+                                    marker=style,
+                                    s=size,
+                                    alpha=properties['alpha'],
+                                    label=label,
+                                    zorder=1)
 
-            size += 2
+                else:
+                    # style = '--' if 'Q' in freq else '-'
+                    self.ax.plot(x, y,
+                                 color=color,
+                                 alpha=properties['alpha'],
+                                 label=label,
+                                 zorder=1)
+
+                size += 2
+
+        else:
+            comp_data = file.data[file.data.COMPONENT == component]
+
+            if comp_data.empty:
+                print(f"No {component} data in {file.filepath.name}.")
+                return
+
+            size = 8  # For scatter point size
+
+            for ind, ch in enumerate(plotting_channels):
+                if ind == 0:
+                    label = f"{file.filepath.stem} (Maxwell)"
+
+                    if min_ch == max_ch:
+                        self.footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[
+                            max_ch]:.3f}ms).  "
+                    else:
+                        self.footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
+                            f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
+                else:
+                    label = None
+
+                x = comp_data.STATION.astype(float) + properties['station_shift']
+                y = comp_data.loc[:, ch].astype(float) * properties['scaling']
+
+                if len(x) == 1:
+                    style = 'o'
+                    self.ax.scatter(x, y,
+                                    color=color,
+                                    marker=style,
+                                    s=size,
+                                    alpha=properties['alpha'],
+                                    label=label,
+                                    zorder=1)
+
+                else:
+                    # style = '--' if 'Q' in freq else '-'
+                    self.ax.plot(x, y,
+                                 color=color,
+                                 alpha=properties['alpha'],
+                                 label=label,
+                                 zorder=1)
+
+                size += 2
 
     def plot_plate(self, filepath, component):
         # try:
@@ -850,7 +931,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
         min_ch = properties['ch_start'] - 1
         max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
-        plotting_channels = channels[min_ch: max_ch]
+        plotting_channels = channels[min_ch: max_ch + 1]
 
         comp_data = file.data[file.data.Component == component]
 
@@ -864,8 +945,12 @@ class TestRunner(QMainWindow, test_runnerUI):
             if ind == 0:
                 label = f"{file.filepath.stem} (PLATE)"
 
-                self.footnote += f"PLATE file plotting channels {min_ch + 1}-{max_ch + 1}" \
-                    f" ({file.ch_times.loc[min_ch] * 1000:.3f}ms-{file.ch_times.loc[max_ch] * 1000:.3f}ms).  "
+                if min_ch == max_ch:
+                    self.footnote += f"PLATE file plotting channel {min_ch + 1} " \
+                        f"({file.ch_times.loc[min_ch] * 1000:.3f}ms).  "
+                else:
+                    self.footnote += f"PLATE file plotting channels {min_ch + 1}-{max_ch + 1}" \
+                        f" ({file.ch_times.loc[min_ch] * 1000:.3f}ms-{file.ch_times.loc[max_ch] * 1000:.3f}ms).  "
             else:
                 label = None
 
@@ -914,7 +999,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
         min_ch = properties['ch_start'] - 1
         max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
-        plotting_channels = channels[min_ch: max_ch]
+        plotting_channels = channels[min_ch: max_ch + 1]
 
         comp_data = file.data[file.data.COMPONENT == component]
 
@@ -1073,67 +1158,6 @@ if __name__ == '__main__':
 
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
 
-    def auto_run_files():
-        t0 = time.time()
-        maxwell_files_folder = sample_files.joinpath(r"Aspect ratio test\Maxwell")
-        plate_files_folder = sample_files.joinpath(r"Aspect ratio test\PLATE")
-
-        maxwell_files = os_sorted(maxwell_files_folder.glob("*.TEM"))
-        plate_files = os_sorted(plate_files_folder.glob("*.DAT"))
-
-        assert len(maxwell_files) == len(plate_files), \
-            print(f"{len(maxwell_files)} Maxwell files vs {len(plate_files)} PLATE files found.")
-
-        results_pdf = sample_files.joinpath(r"Aspect ratio test/Aspect Ratio Test.pdf")
-
-        files = list(zip(maxwell_files, plate_files))[:]
-        filepath, ext = QFileDialog.getSaveFileName(None, 'Save PDF', str(results_pdf),
-                                                    "PDF Files (*.PDF);;All Files (*.*)")
-
-        with PdfPages(filepath) as pdf:
-            progress = QProgressDialog("Processing...", "Cancel", 0, len(files))
-            progress.setWindowModality(QtCore.Qt.WindowModal)
-            progress.setWindowTitle("Processing IRAP Files")
-
-            for ind, (maxwell_file, plate_file) in enumerate(files):
-                if progress.wasCanceled():
-                    break
-                progress.setValue(ind)
-                print(f"Plotting files: {maxwell_file.name}, {plate_file.name} ({ind + 1}/{len(files)})")
-                tpl.open(maxwell_file)
-                tpl.open(plate_file)
-
-                # df = pd.DataFrame(zip(tpl.file_tab_widget.widget(0).widget().file.ch_times[20:44], tpl.file_tab_widget.widget(
-                #     1).widget().file.ch_times * 1000), columns=['Maxwell', 'PLATE'], dtype=float)
-                #
-                # df['Difference'] = df.Maxwell - df.PLATE
-
-                tpl.title.setText("Aspect Ratio Test")
-                tpl.title.editingFinished.emit()
-                tpl.file_tab_widget.widget(0).widget().scale_data_sbox.setValue(0.000001)
-                tpl.file_tab_widget.widget(0).widget().shift_stations_sbox.setValue(-400)
-                tpl.file_tab_widget.widget(0).widget().min_ch.setValue(21)
-                tpl.file_tab_widget.widget(0).widget().max_ch.setValue(44)
-
-                tpl.file_tab_widget.widget(0).widget().alpha_sbox.setValue(50)
-
-                # Print every figure as a PDF page
-                for figure in [tpl.x_figure, tpl.y_figure, tpl.z_figure]:
-
-                    # Only print the figure if there are plotted lines
-                    if figure.axes[0].lines:
-                        old_size = figure.get_size_inches().copy()
-                        figure.set_size_inches((11, 8.5))
-                        # figure.axes[0].set_xlim([0, 200])
-                        pdf.savefig(figure, orientation='landscape')
-                        figure.set_size_inches(old_size)
-
-                tpl.remove_tab(0)
-                tpl.remove_tab(0)
-
-        print(f"Script complete after {(time.time() - t0) / 60:.0f}min {(time.time() - t0) % 60:.0f}s.")
-        os.startfile(filepath)
-
     # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
     # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_y.dat')
     # tem_file = sample_files.joinpath(r'PLATEF files\450_50.dat')
@@ -1161,7 +1185,7 @@ if __name__ == '__main__':
                    file_type='Maxwell')
     # tester.add_row(folderpath=r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\PLATE\2m stations",
     #                file_type='PLATE')
-    tester.pdf_filepath_edit.setText(r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\testing.PDF")
+    tester.pdf_filepath_edit.setText(r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\decay test.PDF")
     # tester.print_pdf()
 
     app.exec_()
