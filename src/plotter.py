@@ -15,6 +15,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.pyplot import cm
 from matplotlib.backends.backend_pdf import PdfPages
+from matplotlib.ticker import FormatStrFormatter
 
 from src.file_types.fem_file import FEMFile, FEMTab
 from src.file_types.tem_file import TEMFile, TEMTab
@@ -666,6 +667,12 @@ class TestRunner(QMainWindow, test_runnerUI):
 
         # Figures
         self.figure, self.ax = plt.subplots()
+        self.ax2 = self.ax.twinx()  # second axes that shares the same x-axis for decay plots
+        self.ax2.get_shared_x_axes().join(self.ax, self.ax2)
+        self.ax2.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
+        self.ax.tick_params(axis='y', labelcolor='blue')
+        self.ax2.tick_params(axis='y', which='major', labelcolor='tab:red')
+        # self.ax2.yaxis.set_minor_formatter(FormatStrFormatter("%.0f"))
         self.figure.set_size_inches((11, 8.5))
 
         def change_pdf_path():
@@ -815,19 +822,17 @@ class TestRunner(QMainWindow, test_runnerUI):
                 self.msg.warning(self, "Different Units", f"The units of {file.filepath.name} are different then"
                                                           f"the existing units ({file.units} vs {self.units})")
 
+        comp_data = file.data[file.data.COMPONENT == component]
+        if comp_data.empty:
+            print(f"No {component} data in {file.filepath.name}.")
+            return
+
         channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+        min_ch = properties['ch_start'] - 1
+        max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
+        plotting_channels = channels[min_ch: max_ch + 1]
 
         if station is None:
-            min_ch = properties['ch_start'] - 1
-            max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
-            plotting_channels = channels[min_ch: max_ch + 1]
-
-            comp_data = file.data[file.data.COMPONENT == component]
-
-            if comp_data.empty:
-                print(f"No {component} data in {file.filepath.name}.")
-                return
-
             size = 8  # For scatter point size
 
             for ind, ch in enumerate(plotting_channels):
@@ -866,49 +871,35 @@ class TestRunner(QMainWindow, test_runnerUI):
                 size += 2
 
         else:
-            comp_data = file.data[file.data.COMPONENT == component]
+            """Plotting decay for run-on effects"""
 
-            if comp_data.empty:
-                print(f"No {component} data in {file.filepath.name}.")
-                return
+            data = comp_data.loc[:, plotting_channels]
+            data.index = comp_data.STATION
+            last_ch_data = data.loc[:, plotting_channels[-1]]
 
-            size = 8  # For scatter point size
+            # Find the station where the response is highest
+            station = last_ch_data.idxmax()
+            print(f"Plotting station {station}.")
 
-            for ind, ch in enumerate(plotting_channels):
-                if ind == 0:
-                    label = f"{file.filepath.stem} (Maxwell)"
+            x = file.ch_times[min_ch: max_ch + 1]
+            decay = data.loc[station, plotting_channels] * properties['scaling']
 
-                    if min_ch == max_ch:
-                        self.footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[
-                            max_ch]:.3f}ms).  "
-                    else:
-                        self.footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
-                            f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
-                else:
-                    label = None
+            label = f"{file.filepath.stem} (Maxwell)"
 
-                x = comp_data.STATION.astype(float) + properties['station_shift']
-                y = comp_data.loc[:, ch].astype(float) * properties['scaling']
+            self.footnote += f"Maxwell file plotting station {station}.  "
 
-                if len(x) == 1:
-                    style = 'o'
-                    self.ax.scatter(x, y,
-                                    color=color,
-                                    marker=style,
-                                    s=size,
-                                    alpha=properties['alpha'],
-                                    label=label,
-                                    zorder=1)
+            # style = '--' if 'Q' in freq else '-'
+            self.ax.plot(x, decay,
+                         color=color,
+                         alpha=properties['alpha'],
+                         label="Linear-scale",
+                         zorder=1)
 
-                else:
-                    # style = '--' if 'Q' in freq else '-'
-                    self.ax.plot(x, y,
-                                 color=color,
-                                 alpha=properties['alpha'],
-                                 label=label,
-                                 zorder=1)
-
-                size += 2
+            self.ax2.plot(x, decay,
+                          color='tab:red',
+                          alpha=properties['alpha'],
+                          label="Logarithmic-scale",
+                          zorder=1)
 
     def plot_plate(self, filepath, component):
         # try:
@@ -1104,7 +1095,37 @@ class TestRunner(QMainWindow, test_runnerUI):
 
                     # Plot the files
                     if maxwell_file:
-                        self.plot_maxwell(maxwell_file, component)
+
+                        def is_eligible(file):
+                            comp_data = file.data[file.data.COMPONENT == component]
+                            if comp_data.empty:
+                                print(f"No {component} data in {file.filepath.name}.")
+                                return False
+
+                            properties = self.get_plotting_info('Maxwell')
+                            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+                            min_ch = properties['ch_start'] - 1
+                            max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
+                            # min_ch = 21 - 1
+                            # max_ch = 44 - 1
+                            plotting_channels = channels[min_ch: max_ch + 1]
+                            data = comp_data.loc[:, plotting_channels]
+                            data.index = comp_data.STATION
+                            """Plotting decay for run-on effects"""
+                            last_ch_data = data.loc[:, plotting_channels[-1]] * properties['scaling']
+                            if last_ch_data.abs().max() >= 5:
+                                return True
+                            else:
+                                print(
+                                    f"Skipping {file.filepath.name} because the max value in the last channel is {last_ch_data.max():.2f}.")
+                                return False
+
+                        parser = TEMFile()
+                        file = parser.parse(maxwell_file)
+                        if is_eligible(file):
+                            self.plot_maxwell(maxwell_file, component, station=True)
+                        else:
+                            continue
                     if mun_file:
                         self.plot_mun(mun_file, component)
                     if peter_file:
@@ -1113,15 +1134,22 @@ class TestRunner(QMainWindow, test_runnerUI):
                         self.plot_plate(plate_file, component)
 
                     # Set the labels
-                    self.ax.set_xlabel(f"Station")
+                    # self.ax.set_xlabel(f"Station")
+                    self.ax.set_xlabel(f"Time (ms)")
                     self.ax.set_ylabel(f"{component} Component Response\n({self.units})")
-                    self.ax.set_title(self.test_name_edit.text())
+                    # self.ax.set_title(self.test_name_edit.text())
+                    self.ax.set_title(f"{self.test_name_edit.text()} - {maxwell_file.stem}")
 
                     if self.custom_stations_cbox.isChecked():
                         self.ax.set_xlim([self.station_start_sbox.value(), self.station_end_sbox.value()])
 
                     # Create the legend
                     handles, labels = self.ax.get_legend_handles_labels()
+                    handles2, labels2 = self.ax2.get_legend_handles_labels()
+
+                    handles.extend(handles2)
+                    labels.extend(labels2)
+
                     if handles:
                         # sort both labels and handles by labels
                         labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
@@ -1137,6 +1165,9 @@ class TestRunner(QMainWindow, test_runnerUI):
                     # plt.show()
                     pdf.savefig(self.figure, orientation='landscape')
                     self.ax.clear()
+                    self.ax2.clear()
+                    self.ax2.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
+                    # self.ax2.yaxis.set_minor_formatter(FormatStrFormatter("%.0f"))
 
                 count += 1
                 progress.setValue(count)
@@ -1147,7 +1178,6 @@ class TestRunner(QMainWindow, test_runnerUI):
 
 if __name__ == '__main__':
     import time
-    import pandas as pd
 
     app = QApplication(sys.argv)
 
@@ -1158,24 +1188,8 @@ if __name__ == '__main__':
 
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
 
-    # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
-    # tem_file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_y.dat')
-    # tem_file = sample_files.joinpath(r'PLATEF files\450_50.dat')
     fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
-    # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Test 4 FEM files\Test 4 - h=5m.fem')
-    # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Turam 2x4 608S_0.96691A_PFCALC at 1A.fem')
-    # fem_file = sample_files.joinpath(r'Maxwell files\FEM\test Z.fem')
-    # tem_file = sample_files.joinpath(r'Maxwell files\TEM\V_1x1_450_50_100 50msec instant on-time first.tem')
-    # tem_file = sample_files.joinpath(r'Maxwell files\TEM\50msec Impulse 100S BField.tem')
-    # tem_file = sample_files.joinpath(r'Maxwell files\TEM\Test 6 - x1e3.tem')
     tem_file = sample_files.joinpath(r'Aspect ratio test\Maxwell\5x150A.TEM')
-
-    # fpl.show()
-    # fpl.open(fem_file)
-
-    # tpl.show()
-    # tpl.open(tem_file)
-    # tpl.print_pdf()
 
     tester = TestRunner()
     tester.show()
@@ -1185,7 +1199,37 @@ if __name__ == '__main__':
                    file_type='Maxwell')
     # tester.add_row(folderpath=r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\PLATE\2m stations",
     #                file_type='PLATE')
-    tester.pdf_filepath_edit.setText(r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\decay test.PDF")
+    # tester.pdf_filepath_edit.setText(r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\decay test.PDF")
     # tester.print_pdf()
+
+    """Run the run-on effects tests"""
+    tester.table.item(0, 2).setText("0.000001")
+    tester.table.item(0, 4).setText("21")
+    tester.table.item(0, 5).setText("44")
+
+
+    tester.include_edit.setText("150, B")
+    tester.include_edit.editingFinished.emit()
+    tester.pdf_filepath_edit.setText(
+        str(sample_files.joinpath(r"Aspect ratio test\Run on effect - 150m plate, 1,000 S.PDF")))
+    tester.print_pdf()
+
+    tester.include_edit.setText("150, C")
+    tester.include_edit.editingFinished.emit()
+    tester.pdf_filepath_edit.setText(
+        str(sample_files.joinpath(r"Aspect ratio test\Run on effect - 150m plate, 10,000 S.PDF")))
+    tester.print_pdf()
+
+    tester.include_edit.setText("600, B")
+    tester.include_edit.editingFinished.emit()
+    tester.pdf_filepath_edit.setText(
+        str(sample_files.joinpath(r"Aspect ratio test\Run on effect - 600m plate, 1,000 S.PDF")))
+    tester.print_pdf()
+
+    tester.include_edit.setText("600, B")
+    tester.include_edit.editingFinished.emit()
+    tester.pdf_filepath_edit.setText(
+        str(sample_files.joinpath(r"Aspect ratio test\Run on effect - 600m plate, 10,000 S.PDF")))
+    tester.print_pdf()
 
     app.exec_()
