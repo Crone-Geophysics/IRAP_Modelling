@@ -1342,7 +1342,8 @@ class TestRunner(QMainWindow, test_runnerUI):
                 last_ch_data = data.loc[:, plotting_channels[-1]]
 
                 # Find the station where the response is highest
-                station = last_ch_data.idxmax()
+                # station = last_ch_data.idxmax()
+                station = 2
                 print(f"Plotting station {station}.")
 
                 # Create the data frame using the base file as a starting point
@@ -1354,7 +1355,28 @@ class TestRunner(QMainWindow, test_runnerUI):
                     df[str(ind + 2)] = tem_file.data.loc[station, plotting_channels].to_frame()
 
                 df = df.T
-                return combined_file
+
+                decay = []
+                n = 10  # Number of files to complete 1 timebase (-1 because of 0 indexing)
+                for ch in list(range(0, len(plotting_channels))):
+                    print(f"Calculating channel {ch + 6}.")
+                    response = df.iloc[0, ch] - df.iloc[n + 1, ch] - df.iloc[2, ch] + df.iloc[n + 3, ch] + \
+                               df.iloc[4, ch] - df.iloc[n + 5, ch] - df.iloc[6, ch] + df.iloc[n + 7, ch] + \
+                               df.iloc[8, ch] - df.iloc[n + 9, ch]
+                    decay.append(response)
+
+                # Plot the aspect ratio test file
+                parser = TEMFile()
+                other_file = parser.parse(r'C:\Users\Eric\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\Maxwell\2m stations\600x600C.tem')
+                other_file_data = other_file.data.loc[station, [f'CH{num}' for num in range(6, 45)]]
+
+                fig, ax = plt.subplots()
+                ax.set_yscale('symlog')
+                ax.plot(decay, color='b')
+                ax.plot(df.loc['1'], color='r')
+                ax.plot(other_file_data, color='g')
+                fig.show()
+                return decay
 
         print(f"Printing run-on")
         self.ax2.get_yaxis().set_visible(False)
@@ -1377,7 +1399,7 @@ class TestRunner(QMainWindow, test_runnerUI):
                 # Plot the files
                 if plotting_files['Maxwell']:
                     combined_file = get_regression(plotting_files['Maxwell'])
-                    plot_maxwell(combined_file)
+                    # plot_maxwell(combined_file)
                 # if plotting_files['MUN']:
                 #     plot_mun(mun_file, component)
                 # if plotting_files['Peter']:
@@ -1475,7 +1497,7 @@ if __name__ == '__main__':
     tester.test_name_edit.setText("Aspect Ratio Test")
     # tester.add_row(folderpath=r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\Maxwell\2m stations",
     #                file_type='Maxwell')
-    tester.add_row(folderpath=r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Run-on effect test\Maxwell",
+    tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect test\Maxwell")),
                    file_type='Maxwell')
     # tester.pdf_filepath_edit.setText(r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\decay test.PDF")
     # tester.print_pdf()
