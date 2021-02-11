@@ -3,12 +3,14 @@ import os
 import pickle
 import io
 import re
+import math
 import numpy as np
+import pandas as pd
 from pathlib import Path
 import matplotlib
 import matplotlib.pyplot as plt
 from itertools import zip_longest
-from natsort import natsorted, humansorted, os_sorted
+from natsort import natsorted, os_sorted
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, \
     NavigationToolbar2QT as NavigationToolbar
@@ -1246,64 +1248,125 @@ class TestRunner(QMainWindow, test_runnerUI):
         :param plotting_files: dict
         :param pdf_filepath: str
         """
-
-        def plot_maxwell(filepath, component):
+        def plot_maxwell(files, pdf):
             """
-            Plot a Maxwell TEM file
-            :param filepath: Path object
-            :param component: Str, either X, Y, or Z.
+            Calculate the run-on effect for Maxwell files.
+            :param files: list of filepaths of the maxwell files
+            :param pdf: str, PDF file to save to.
             """
-            parser = TEMFile()
-            file = parser.parse(filepath)
+            print(f"Printing Maxwell run-on")
+            self.ax2.get_yaxis().set_visible(False)
+            self.ax.tick_params(axis='y', labelcolor='k')
 
-            print(f"Plotting {filepath.name}.")
             properties = self.get_plotting_info('Maxwell')  # Plotting properties
-            color = 'b'
-            if not self.units:
-                self.units = file.units
-            else:
-                if file.units != self.units:
-                    self.msg.warning(self, "Different Units", f"The units of {file.filepath.name} are different then"
-                                           f"the existing units ({file.units} vs {self.units})")
 
-            comp_data = file.data[file.data.COMPONENT == component]
-            if comp_data.empty:
-                print(f"No {component} data in {file.filepath.name}.")
-                return
+            progress = QProgressDialog("Parsing TEM files", "Cancel", 0, len(files))
+            progress.setWindowModality(QtCore.Qt.WindowModal)
+            progress.setWindowTitle("Printing Maxwell run-on")
+            progress.show()
+            count = 0
 
-            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+            # Gather all the TEM files in the folder
+            tem_files = []
+            for file in files:
+                progress.setLabelText(f"Parsing {Path(file).name}")
+                tem_file = TEMFile()
+                tem_file.parse(file)
+                tem_files.append(tem_file)
+
+                count += 1
+                progress.setValue(count)
+            base_file = tem_files[0]  # Use the first file as a base file for determining which station to plot
+
+            channels = [f'CH{num}' for num in range(1, len(base_file.ch_times) + 1)]
             min_ch = properties['ch_start'] - 1
             max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
             plotting_channels = channels[min_ch: max_ch + 1]
 
-            """Plotting decay for run-on effects"""
-            data = comp_data.loc[:, plotting_channels]
-            data.index = comp_data.STATION
-            last_ch_data = data.loc[:, plotting_channels[-1]]
+            count = 0
+            progress.setValue(count)
+            progress.setMaximum(3)
 
-            # Find the station where the response is highest
-            station = last_ch_data.idxmax()
-            print(f"Plotting station {station}.")
+            for component in [cbox.text() for cbox in [self.x_cbox, self.y_cbox, self.z_cbox] if cbox.isChecked()]:
+                if progress.wasCanceled():
+                    print(f"Process cancelled.")
+                    return
+                progress.setLabelText(f"Plotting {component} component.")
+                print(f"Plotting {component} component.")
 
-            x = file.ch_times[min_ch: max_ch + 1]
-            decay = data.loc[station, plotting_channels] * properties['scaling']
+                comp_data = base_file.data[base_file.data.COMPONENT == component]
+                if comp_data.empty:
+                    print(f"No {component} data in {base_file.filepath.name}.")
+                    return
 
-            label = f"{file.filepath.stem} (Maxwell)"
+                print(f"Plotting set {count + 1}/{3}")
 
-            self.footnote += f"Maxwell file plotting station {station}.  "
+                self.footnote = ''
 
-            # style = '--' if 'Q' in freq else '-'
-            self.ax.plot(x, decay,
-                         color=color,
-                         alpha=properties['alpha'],
-                         label="Linear-scale",
-                         zorder=1)
+                data = comp_data.loc[:, plotting_channels]
+                data.index = comp_data.STATION
+                last_ch_data = data.loc[:, plotting_channels[-1]]
 
-            self.ax2.plot(x, decay,
-                          color='tab:red',
-                          alpha=properties['alpha'],
-                          label="Logarithmic-scale",
-                          zorder=1)
+                # Find the station where the response is highest
+                station = last_ch_data.idxmax()
+                # station = 2
+                self.footnote += f"Maxwell file plotting station {station}.  "
+                print(f"Plotting station {station}.")
+
+                # Create a data frame from all the data in all the files in the folder
+                df = pd.DataFrame()
+                for ind, tem_file in enumerate(tem_files):
+                    file_comp_data = tem_file.data[tem_file.data.COMPONENT == component]
+                    file_comp_data.index = file_comp_data.STATION
+                    df[str(ind + 1)] = file_comp_data.loc[station, plotting_channels]
+                df = df.T
+
+                # Calculate the decay
+                decay = []
+                n = 10  # Number of files to complete 1 timebase
+                for ch in list(range(0, len(plotting_channels))):
+                    # print(f"Calculating channel {ch + 6}.")
+                    response = df.iloc[0, ch] - df.iloc[n + 1, ch] - df.iloc[2, ch] + df.iloc[n + 3, ch] + \
+                               df.iloc[4, ch] - df.iloc[n + 5, ch] - df.iloc[6, ch] + df.iloc[n + 7, ch] + \
+                               df.iloc[8, ch] - df.iloc[n + 9, ch]
+                    decay.append(response)
+
+                # Include a test file for comparison
+                parser = TEMFile()
+                other_file = parser.parse(r'C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\Maxwell\2m stations\600x600C.tem')
+                other_file_data = other_file.data[other_file.data.COMPONENT == component]
+                other_file_data.index = other_file_data.STATION
+                other_file_decay = other_file_data.loc[station, plotting_channels] * properties['scaling']
+
+                # Plot the data
+                x = base_file.ch_times[min_ch: max_ch + 1]
+                decay = np.array(decay) * properties['scaling']
+                self.ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+                self.ax.plot(x, decay, color='b', label="Calculated", alpha=properties['alpha'])
+                # ax.plot(df.loc['1'], color='r', label="")
+                self.ax.plot(x, other_file_decay, color='r', label="600x600C", alpha=0.6)
+
+                # Set the labels
+                self.ax.set_xlabel(f"Time (ms)")
+                self.ax.set_ylabel(f"{component} Component Response\n({base_file.units})")
+                self.ax.set_title(self.test_name_edit.text())
+
+                # Add the footnote
+                self.ax.text(0.995, 0.01, self.footnote,
+                             ha='right',
+                             va='bottom',
+                             size=6,
+                             transform=self.figure.transFigure)
+
+                # Create the legend
+                self.ax.legend()
+
+                # Save the PDF
+                pdf.savefig(self.figure, orientation='landscape')
+
+                self.ax.clear()
+                count += 1
+                progress.setValue(count)
 
         def plot_plate(filepath, component):
             raise NotImplementedError("PLATE run-on not implemented yet.")
@@ -1314,128 +1377,15 @@ class TestRunner(QMainWindow, test_runnerUI):
         def plot_peter(filepath, component):
             raise NotImplementedError("Peter run-on not implemented yet.")
 
-        def get_regression(files):
-            tem_files = []
-
-            for file in files:
-                tem_file = TEMFile()
-                tem_file.parse(file)
-                tem_files.append(tem_file)
-
-            # Use the first file as a base file for determining which station to plot
-            base_file = tem_files[0]
-
-            for component in [cbox.text() for cbox in [self.x_cbox, self.y_cbox, self.z_cbox] if cbox.isChecked()]:
-                comp_data = base_file.data[base_file.data.COMPONENT == component]
-                if comp_data.empty:
-                    print(f"No {component} data in {base_file.filepath.name}.")
-                    return
-
-                properties = self.get_plotting_info('Maxwell')  # Plotting properties
-                channels = [f'CH{num}' for num in range(1, len(base_file.ch_times) + 1)]
-                min_ch = properties['ch_start'] - 1
-                max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
-                plotting_channels = channels[min_ch: max_ch + 1]
-
-                data = comp_data.loc[:, plotting_channels]
-                data.index = comp_data.STATION
-                last_ch_data = data.loc[:, plotting_channels[-1]]
-
-                # Find the station where the response is highest
-                # station = last_ch_data.idxmax()
-                station = 2
-                print(f"Plotting station {station}.")
-
-                # Create the data frame using the base file as a starting point
-                df = base_file.data.loc[station, plotting_channels].to_frame()
-                df.columns = ['1']
-
-                # Populate the data frame with the data from each file
-                for ind, tem_file in enumerate(tem_files[1:]):
-                    df[str(ind + 2)] = tem_file.data.loc[station, plotting_channels].to_frame()
-
-                df = df.T
-
-                decay = []
-                n = 10  # Number of files to complete 1 timebase (-1 because of 0 indexing)
-                for ch in list(range(0, len(plotting_channels))):
-                    print(f"Calculating channel {ch + 6}.")
-                    response = df.iloc[0, ch] - df.iloc[n + 1, ch] - df.iloc[2, ch] + df.iloc[n + 3, ch] + \
-                               df.iloc[4, ch] - df.iloc[n + 5, ch] - df.iloc[6, ch] + df.iloc[n + 7, ch] + \
-                               df.iloc[8, ch] - df.iloc[n + 9, ch]
-                    decay.append(response)
-
-                # Plot the aspect ratio test file
-                parser = TEMFile()
-                other_file = parser.parse(r'C:\Users\Eric\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\Maxwell\2m stations\600x600C.tem')
-                other_file_data = other_file.data.loc[station, [f'CH{num}' for num in range(6, 45)]]
-
-                fig, ax = plt.subplots()
-                ax.set_yscale('symlog')
-                ax.plot(decay, color='b')
-                ax.plot(df.loc['1'], color='r')
-                ax.plot(other_file_data, color='g')
-                fig.show()
-                return decay
-
-        print(f"Printing run-on")
-        self.ax2.get_yaxis().set_visible(False)
-        self.ax.tick_params(axis='y', labelcolor='k')
-        progress = QProgressDialog("Processing...", "Cancel", 0, int(num_files_found))
-        progress.setWindowModality(QtCore.Qt.WindowModal)
-        progress.setWindowTitle("Printing Run-on Effect")
-        progress.show()
-        count = 0
-
         with PdfPages(pdf_filepath) as pdf:
-            if progress.wasCanceled():
-                print(f"Process cancelled.")
-                return
-
-            print(f"Plotting set {count + 1}/{int(num_files_found)}")
-            for component in [cbox.text() for cbox in [self.x_cbox, self.y_cbox, self.z_cbox] if cbox.isChecked()]:
-                self.footnote = ''
-
-                # Plot the files
-                if plotting_files['Maxwell']:
-                    combined_file = get_regression(plotting_files['Maxwell'])
-                    # plot_maxwell(combined_file)
-                # if plotting_files['MUN']:
-                #     plot_mun(mun_file, component)
-                # if plotting_files['Peter']:
-                #     plot_peter(peter_file, component)
-                # if plotting_files['PLATE']:
-                #     plot_plate(plate_file, component)
-
-                # Set the labels
-                self.ax.set_xlabel(f"Station")
-                self.ax.set_ylabel(f"{component} Component Response\n({self.units})")
-                self.ax.set_title(self.test_name_edit.text())
-
-                if self.custom_stations_cbox.isChecked():
-                    self.ax.set_xlim([self.station_start_sbox.value(), self.station_end_sbox.value()])
-
-                # Create the legend
-                handles, labels = self.ax.get_legend_handles_labels()
-
-                if handles:
-                    # sort both labels and handles by labels
-                    labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
-                    self.ax.legend(handles, labels).set_draggable(True)
-
-                # Add the footnote
-                self.ax.text(0.995, 0.01, self.footnote,
-                             ha='right',
-                             va='bottom',
-                             size=6,
-                             transform=self.figure.transFigure)
-
-                # plt.show()
-                pdf.savefig(self.figure, orientation='landscape')
-                self.ax.clear()
-
-                count += 1
-                progress.setValue(count)
+            if plotting_files['Maxwell']:
+                plot_maxwell(plotting_files['Maxwell'], pdf)
+            if plotting_files['MUN']:
+                plot_mun(plotting_files['MUN'], pdf)
+            if plotting_files['Peter']:
+                plot_peter(plotting_files['Peter'], pdf)
+            if plotting_files['PLATE']:
+                plot_plate(plotting_files['PLATE'], pdf)
 
     def print_pdf(self):
         """Create the PDF"""
@@ -1494,7 +1444,7 @@ if __name__ == '__main__':
     tester = TestRunner()
     tester.show()
 
-    tester.test_name_edit.setText("Aspect Ratio Test")
+    tester.test_name_edit.setText("Maxwell Aspect Ratio Test Run-on Effect Calculation")
     # tester.add_row(folderpath=r"C:\Users\Mortulo\PycharmProjects\IRAP_Modelling\sample_files\Aspect ratio test\Maxwell\2m stations",
     #                file_type='Maxwell')
     tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect test\Maxwell")),
@@ -1509,9 +1459,10 @@ if __name__ == '__main__':
 
     tester.plot_run_on_rbtn.setChecked(True)
     tester.pdf_filepath_edit.setText(
-        str(sample_files.joinpath(r"Run-on effect test\Testing.PDF")))
+        str(sample_files.joinpath(r"Run-on effect test\Maxwell Aspect Ratio Test Run-on Effect Calculation (Full waveform).PDF")))
     tester.print_pdf()
 
+    """Plot decays"""
     # tester.include_edit.setText("150, B")
     # tester.include_edit.editingFinished.emit()
     # tester.pdf_filepath_edit.setText(
