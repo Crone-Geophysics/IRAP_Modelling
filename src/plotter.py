@@ -51,6 +51,8 @@ test_runnerUI, _ = uic.loadUiType(TestRunnerUIFile)
 matplotlib.use('Qt5Agg')
 rainbow_colors = iter(cm.rainbow(np.linspace(0, 1, 20)))
 quant_colors = np.nditer(np.array(plt.rcParams['axes.prop_cycle'].by_key()['color']))
+
+
 # iter_colors = np.nditer(quant_colors)
 # quant_colors = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 # color = iter(cm.tab10())
@@ -95,7 +97,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
 
         self.axes = [self.hcp_ax, self.vca_ax]
         self.canvases = [self.hcp_canvas, self.vca_canvas]
-        
+
         # Status bar
         self.num_files_label = QLabel()
 
@@ -316,7 +318,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
         for canvas in self.canvases:
             canvas.draw()
             canvas.flush_events()
-            
+
     def update_alpha(self, alpha):
         print(f"New alpha: {alpha / 100}")
         for canvas, ax in zip(self.canvases, self.axes):
@@ -544,7 +546,8 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
             first_line = open(filepath).readlines()[0]
             if 'Data type:' in first_line:
                 components = ("X", "Y", "Z")
-                component, ok_pressed = QInputDialog.getItem(self, "Choose Component", "Component:", components, 0, False)
+                component, ok_pressed = QInputDialog.getItem(self, "Choose Component", "Component:", components, 0,
+                                                             False)
                 if ok_pressed and component:
                     tab = MUNTab(parent=self, axes=axes, component=component)
                 else:
@@ -594,7 +597,7 @@ class TEMPlotter(QMainWindow, tem_plotterUI):
                 if ax.get_ylabel() != label:
                     print(f"Warning: The units for {tab.file.filepath.name} are different then the prior units.")
                     self.msg.warning(self, "Warning", f"The units for {tab.file.filepath.name} are"
-                                                      f" different then the prior units.")
+                    f" different then the prior units.")
 
         self.update_legend()
 
@@ -1072,6 +1075,8 @@ class TestRunner(QMainWindow, test_runnerUI):
                 count += 1
                 progress.setValue(count)
 
+        os.startfile(pdf_filepath)
+
     def print_decays(self, num_files_found, plotting_files, pdf_filepath):
         """
         Plot the decays of stations, based on programmed criteria.
@@ -1242,13 +1247,16 @@ class TestRunner(QMainWindow, test_runnerUI):
                 count += 1
                 progress.setValue(count)
 
+        os.startfile(pdf_filepath)
+
     def print_run_on(self, plotting_files, pdf_filepath):
         """
         Print the run-on effect calculation plots
         :param plotting_files: dict
         :param pdf_filepath: str
         """
-        def plot_maxwell(files, pdf):
+
+        def plot_maxwell_decays(files, pdf):
             """
             Calculate the run-on effect for Maxwell files.
             :param files: list of filepaths of the maxwell files
@@ -1371,10 +1379,10 @@ class TestRunner(QMainWindow, test_runnerUI):
                 count += 1
                 progress.setValue(count)
 
-        def plot_maxwell2(files, pdf):
+        def plot_maxwell_convergence(files, pdf):
             """
-            Calculate the run-on effect half-cycle for single a Maxwell file.
-            :param files: list, filepath of the single file.
+            Calculate the run-on effect half-cycle convergence Maxwell files.
+            :param files: list, Path filepaths.
             :param pdf: str, PDF file to save to.
             """
             print(f"Printing Maxwell run-on convergence")
@@ -1484,6 +1492,106 @@ class TestRunner(QMainWindow, test_runnerUI):
                 count += 1
                 progress.setValue(count)
 
+        def tabulate_maxwell_convergence(files):
+            """
+            Calculate the run-on effect half-cycle convergence Maxwell files and tabulate the results.
+            :param files: list, Path filepaths.
+            :param csv_filepath: str.
+            """
+            print(f"Printing Maxwell run-on convergence")
+            properties = self.get_plotting_info('Maxwell')  # Plotting properties
+
+            convergence_df = pd.DataFrame()
+
+            progress = QProgressDialog("Parsing TEM files", "Cancel", 0, len(files))
+            progress.setWindowModality(QtCore.Qt.WindowModal)
+            progress.setWindowTitle("Printing Maxwell run-on")
+            progress.show()
+            count = 0
+
+            for file in files:
+                print(f"Plotting {file.name} ({count}/{len(files)}).")
+                self.footnote = ''
+                self.ax2.get_yaxis().set_visible(False)
+                self.ax.tick_params(axis='y', labelcolor='k')
+
+                tem_file = TEMFile()
+                tem_file.parse(file)
+
+                # Find the comparison file
+                base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio test\Maxwell\2m stations')
+                other_file = base_folder.joinpath(file.name)
+                if not other_file.is_file():
+                    raise FileNotFoundError(f"Cannot find {other_file}")
+                base_file = TEMFile()
+                base_file = base_file.parse(other_file)
+
+                channels = [f'CH{num}' for num in range(1, len(tem_file.ch_times) + 1)]
+
+                progress.setValue(count)
+
+                for component in [cbox.text() for cbox in [self.x_cbox, self.y_cbox, self.z_cbox] if cbox.isChecked()]:
+                    if progress.wasCanceled():
+                        print(f"Process cancelled.")
+                        return
+                    print(f"Plotting {component} component.")
+
+                    comp_data = tem_file.data[tem_file.data.COMPONENT == component]
+                    base_file_data = base_file.data[base_file.data.COMPONENT == component]
+                    base_file_data.index = base_file_data.STATION
+
+                    data = comp_data.loc[:, channels]
+                    data.index = comp_data.STATION
+                    last_ch_data = data.loc[:, channels[-1]]
+
+                    # Find the station where the response is highest
+                    station = last_ch_data.idxmax()
+                    self.footnote += f"{component} component plotting station {station}.  "
+
+                    # Create a data frame from all the data in all the files in the folder
+                    file_comp_data = tem_file.data[tem_file.data.COMPONENT == component]
+                    file_comp_data.index = file_comp_data.STATION
+                    df = file_comp_data.loc[station, channels]
+                    df = df.T
+
+                    base_file_channel_value = base_file_data.loc[station, "CH44"] * properties['scaling']
+
+                    n = 9
+                    terms = [df.iloc[0],
+                             - df.iloc[n + 1],
+                             - df.iloc[2],
+                             df.iloc[n + 3],
+                             df.iloc[4],
+                             - df.iloc[n + 5],
+                             - df.iloc[6],
+                             df.iloc[n + 7],
+                             df.iloc[8]]
+
+                    # Calculate the convergence
+                    xs = range(1, 6)
+                    responses = np.array([sum(terms[:2 * n]) for n in xs]) * properties['scaling']
+                    diff = base_file_channel_value - responses
+                    convergence_df[f"{file.stem} - {component}"] = np.abs(diff)
+
+                count += 1
+
+            convergence_df = convergence_df.T.round(decimals=2).set_axis([str(num) for num in range(1, 6)], axis=1)
+
+            # Find the first column where all columns past it have a difference less than 1.
+            convergence = []
+            for i, row in convergence_df.iterrows():
+                print(f"Items in row:\n{row}")
+                for j, col in enumerate(row):
+                    print(F"Evaluating: \n{row[j:]}")
+                    if all([k < 1 for k in row[j:]]):
+                        print(f"All values in {row[j:]} are less than 1.")
+                        convergence.append(j + 1)
+                        break
+
+            convergence_df['Required_half_cycles'] = convergence
+            convergence_df.loc[:, "Required_half_cycles"].to_csv(self.pdf_filepath_edit.text())
+            os.startfile(self.pdf_filepath_edit.text())
+
         def plot_plate(filepath, component):
             raise NotImplementedError("PLATE run-on not implemented yet.")
 
@@ -1495,13 +1603,18 @@ class TestRunner(QMainWindow, test_runnerUI):
 
         with PdfPages(pdf_filepath) as pdf:
             if plotting_files['Maxwell']:
-                plot_maxwell2(plotting_files['Maxwell'], pdf)
+                # plot_maxwell_decays(plotting_files['Maxwell'], pdf)
+                plot_maxwell_convergence(plotting_files['Maxwell'], pdf)
             if plotting_files['MUN']:
                 plot_mun(plotting_files['MUN'], pdf)
             if plotting_files['Peter']:
                 plot_peter(plotting_files['Peter'], pdf)
             if plotting_files['PLATE']:
                 plot_plate(plotting_files['PLATE'], pdf)
+
+        # tabulate_maxwell_convergence(plotting_files['Maxwell'])
+
+        os.startfile(pdf_filepath)
 
     def print_pdf(self):
         """Create the PDF"""
@@ -1539,7 +1652,6 @@ class TestRunner(QMainWindow, test_runnerUI):
             self.print_run_on(plotting_files, pdf_filepath)
 
         print(f"Process complete after {(time.time() - t0) / 60:02.0f}:{(time.time() - t0) % 60:02.0f}")
-        os.startfile(pdf_filepath)
 
 
 if __name__ == '__main__':
@@ -1560,7 +1672,7 @@ if __name__ == '__main__':
     tester = TestRunner()
     tester.show()
 
-    """Run the run-on convergence"""
+    """Plot run-on convergence"""
     tester.plot_run_on_rbtn.setChecked(True)
 
     tester.test_name_edit.setText("Run-on Effect Convergence")
@@ -1591,6 +1703,38 @@ if __name__ == '__main__':
     tester.include_edit.setText("600, C")
     tester.include_edit.editingFinished.emit()
     tester.print_pdf()
+
+    """Table run-on convergence"""
+    # tester.plot_run_on_rbtn.setChecked(True)
+    #
+    # tester.test_name_edit.setText("Run-on Effect Convergence")
+    # tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect test\Maxwell\450ms")),
+    #                file_type='Maxwell')
+    # tester.table.item(0, 2).setText("0.000001")
+    #
+    # tester.pdf_filepath_edit.setText(str(sample_files.joinpath(
+    #     r"Run-on effect test\Run-on Effect Convergence - 150m plate, 1,000 S.CSV")))
+    # tester.include_edit.setText("150, B")
+    # tester.include_edit.editingFinished.emit()
+    # tester.print_pdf()
+    #
+    # tester.pdf_filepath_edit.setText(str(sample_files.joinpath(
+    #     r"Run-on effect test\Run-on Effect Convergence - 150m plate, 10,000 S.CSV")))
+    # tester.include_edit.setText("150, C")
+    # tester.include_edit.editingFinished.emit()
+    # tester.print_pdf()
+    #
+    # tester.pdf_filepath_edit.setText(str(sample_files.joinpath(
+    #     r"Run-on effect test\Run-on Effect Convergence - 600m plate, 1,000 S.CSV")))
+    # tester.include_edit.setText("600, B")
+    # tester.include_edit.editingFinished.emit()
+    # tester.print_pdf()
+    #
+    # tester.pdf_filepath_edit.setText(str(sample_files.joinpath(
+    #     r"Run-on effect test\Run-on Effect Convergence - 600m plate, 10,000 S.CSV")))
+    # tester.include_edit.setText("600, C")
+    # tester.include_edit.editingFinished.emit()
+    # tester.print_pdf()
 
     """Run the run-on effects tests"""
     # tester.plot_run_on_rbtn.setChecked(True)
@@ -1630,4 +1774,5 @@ if __name__ == '__main__':
     #     # str(sample_files.joinpath(r"Run-on effect test\Run on effect - 600m plate, 10,000 S, full waveform.PDF")))
     # tester.print_pdf()
 
+    tester.close()
     app.exec_()
