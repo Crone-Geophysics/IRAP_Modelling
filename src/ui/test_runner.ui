@@ -22,7 +22,7 @@
       </property>
       <property name="icon">
        <iconset>
-        <normaloff>../../../../.designer/backup/icons/add.png</normaloff>../../../../.designer/backup/icons/add.png</iconset>
+        <normaloff>icons/add.png</normaloff>icons/add.png</iconset>
       </property>
      </widget>
     </item>
@@ -299,14 +299,14 @@
         </widget>
        </item>
        <item>
-        <widget class="QRadioButton" name="plot_half_cycles_rbtn">
+        <widget class="QRadioButton" name="plot_run_on_convergence_rbtn">
          <property name="text">
           <string>Run-On Convergence Plots</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QRadioButton" name="table_half_cycles_rbtn">
+        <widget class="QRadioButton" name="table_run_on_convergence_rbtn">
          <property name="text">
           <string>Run-On Convergence Tables</string>
          </property>

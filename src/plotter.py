@@ -719,8 +719,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             return
 
         if not folderpath:
-            folderpath = QFileDialog().getExistingDirectory(self, "Select Folder", "",
-                                                            QFileDialog.DontUseNativeDialog)
+            folderpath = QFileDialog().getExistingDirectory(self, "Select Folder", "", QFileDialog.DontUseNativeDialog)
 
             if not folderpath:
                 print(f"No folder chosen.")
@@ -748,6 +747,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             end_ch = QTableWidgetItem("99")
             alpha = QTableWidgetItem("1.0")
 
+            # Fill the row information
             for col, item in enumerate([path_item, file_type_item, data_scaling, station_shift, start_ch, end_ch,
                                         alpha]):
                 item.setTextAlignment(QtCore.Qt.AlignCenter)
@@ -1262,7 +1262,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             :param files: list of filepaths of the maxwell files
             :param pdf: str, PDF file to save to.
             """
-            print(f"Printing Maxwell run-on")
+            print(f"Printing Maxwell run-on effect")
             self.ax2.get_yaxis().set_visible(False)
             self.ax.tick_params(axis='y', labelcolor='k')
 
@@ -1436,7 +1436,11 @@ class TestRunner(QMainWindow, test_runnerUI):
                 base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio test\Maxwell\2m stations')
                 other_file = base_folder.joinpath(file.name)
                 if not other_file.is_file():
-                    raise FileNotFoundError(f"Cannot find {other_file}")
+                    print(f"Cannot find {other_file}.")
+                    count += 1
+                    progress.setValue(count)
+                    continue
+
                 base_file = TEMFile()
                 base_file = base_file.parse(other_file)
 
@@ -1467,20 +1471,34 @@ class TestRunner(QMainWindow, test_runnerUI):
                     file_comp_data.index = file_comp_data.STATION
                     df = file_comp_data.loc[station, channels]
                     df = df.T
-                    n = 9
+                    n = int(float(tem_file.off_time) / 50)  # Number of sequential 50ms timebases
 
-                    terms = [df.iloc[0],
-                             - df.iloc[n + 1],
-                             - df.iloc[2],
-                             df.iloc[n + 3],
-                             df.iloc[4],
-                             - df.iloc[n + 5],
-                             - df.iloc[6],
-                             df.iloc[n + 7],
-                             df.iloc[8]]
+                    terms = []
+                    # Build the formula
+                    for i in range(0, n):
+                        p = i % 4
+                        if p == 0:
+                            terms.append(df.iloc[i])
+                        elif p == 1:
+                            terms.append(- df.iloc[n + i])
+                        elif p == 2:
+                            terms.append(- df.iloc[i])
+                        else:
+                            terms.append(df.iloc[n + i])
+
+                    terms = terms[:-1]
+                    # terms2 = [df.iloc[0],
+                    #          - df.iloc[n + 1],
+                    #          - df.iloc[2],
+                    #          df.iloc[n + 3],
+                    #          df.iloc[4],
+                    #          - df.iloc[n + 5],
+                    #          - df.iloc[6],
+                    #          df.iloc[n + 7],
+                    #          df.iloc[8]]
 
                     # Plot the data
-                    xs = range(1, 6)
+                    xs = range(1, math.floor(n / 2) + 1)
                     responses = np.array([sum(terms[:2 * n]) for n in xs]) * properties['scaling']
 
                     self.ax.plot(xs, responses,
@@ -1490,7 +1508,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
                     # Add the value of channel 44 from the comparisson file
                     base_file_channel_value = base_file_data.loc[station, "CH44"] * properties['scaling']
-                    self.ax.plot(xs, np.repeat(base_file_channel_value, 5),
+                    self.ax.plot(xs, np.repeat(base_file_channel_value, math.floor(n / 2)),
                                  color=colors[component],
                                  ls='--',
                                  lw=1.,
@@ -1532,7 +1550,6 @@ class TestRunner(QMainWindow, test_runnerUI):
             """
             Calculate the run-on effect half-cycle convergence Maxwell files and tabulate the results.
             :param files: list, Path filepaths.
-            :param csv_filepath: str.
             """
             print(f"Printing Maxwell run-on convergence")
             properties = self.get_plotting_info('Maxwell')  # Plotting properties
@@ -1558,7 +1575,10 @@ class TestRunner(QMainWindow, test_runnerUI):
                 base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio test\Maxwell\2m stations')
                 other_file = base_folder.joinpath(file.name)
                 if not other_file.is_file():
-                    raise FileNotFoundError(f"Cannot find {other_file}")
+                    print(f"Cannot find {other_file}.")
+                    count += 1
+                    progress.setValue(count)
+                    continue
                 base_file = TEMFile()
                 base_file = base_file.parse(other_file)
 
@@ -1668,11 +1688,14 @@ class TestRunner(QMainWindow, test_runnerUI):
             for file in files:
                 plotting_files[file_type].append(file)
 
+        if not any(plotting_files.values()):
+            raise ValueError("No plotting files found.")
+
         if self.plot_profiles_rbtn.isChecked():
             self.print_profiles(num_files_found, plotting_files, pdf_filepath)
         elif self.plot_decays_rbtn.isChecked():
             self.print_decays(num_files_found, plotting_files, pdf_filepath)
-        elif self.plot_run_on_rbtn.isChecked():
+        elif self.plot_run_on_comparison_rbtn.isChecked():
             self.print_run_on_comparison(plotting_files, pdf_filepath)
         elif self.plot_run_on_convergence_rbtn.isChecked():
             self.print_run_on_convergence(plotting_files, pdf_filepath)
@@ -1700,78 +1723,12 @@ if __name__ == '__main__':
     tester = TestRunner()
     tester.show()
 
-    def plot_run_on_convergence():
-        """Plot the half-cycle convergence of run-on effect"""
-        tester.plot_run_on_rbtn.setChecked(True)
-
-        tester.test_name_edit.setText("Run-on Effect Convergence")
-        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect test\Maxwell\450ms")),
-                       file_type='Maxwell')
-        tester.table.item(0, 2).setText("0.000001")
-
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect test\Run-on Effect Convergence - 150m plate, 1,000 S.PDF")))
-        tester.include_edit.setText("150, B")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
-
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect test\Run-on Effect Convergence - 150m plate, 10,000 S.PDF")))
-        tester.include_edit.setText("150, C")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
-
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect test\Run-on Effect Convergence - 600m plate, 1,000 S.PDF")))
-        tester.include_edit.setText("600, B")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
-
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect test\Run-on Effect Convergence - 600m plate, 10,000 S.PDF")))
-        tester.include_edit.setText("600, C")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
-
-    def tabulate_run_on_convergence():
-        """Tabulate the number of half-cycles required for convergence of run-on effect"""
-        tester.plot_run_on_rbtn.setChecked(True)
-
-        tester.test_name_edit.setText("Run-on Effect Convergence")
-        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect test\Maxwell\450ms")),
-                       file_type='Maxwell')
-        tester.table.item(0, 2).setText("0.000001")
-
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect test\Run-on Effect Convergence - 150m plate, 1,000 S.CSV")))
-        tester.include_edit.setText("150, B")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
-        #
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect test\Run-on Effect Convergence - 150m plate, 10,000 S.CSV")))
-        # tester.include_edit.setText("150, C")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
-        #
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect test\Run-on Effect Convergence - 600m plate, 1,000 S.CSV")))
-        # tester.include_edit.setText("600, B")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
-        #
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect test\Run-on Effect Convergence - 600m plate, 10,000 S.CSV")))
-        # tester.include_edit.setText("600, C")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
-
     def plot_run_on_comparison():
         """Run the run-on effects tests"""
         tester.plot_run_on_comparison_rbtn.setChecked(True)
 
         tester.test_name_edit.setText("Maxwell Aspect Ratio Test Run-on Effect Calculation")
-        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect test\Maxwell\600x600C")),
+        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\600x600C")),
                        file_type='Maxwell')
 
         tester.table.item(0, 2).setText("0.000001")
@@ -1780,36 +1737,100 @@ if __name__ == '__main__':
         tester.table.item(0, 4).setText("45")
         tester.table.item(0, 5).setText("68")
 
-        tester.include_edit.setText("150, B")
-        tester.include_edit.editingFinished.emit()
-        tester.output_filepath_edit.setText(
-            str(sample_files.joinpath(r"Aspect ratio test\Run on effect - 150m plate, 1,000 S.PDF")))
-        tester.print_pdf()
-
+        # tester.include_edit.setText("150, B")
+        # tester.include_edit.editingFinished.emit()
+        # tester.output_filepath_edit.setText(
+        #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 150m plate, 1,000 S.PDF")))
+        # tester.print_pdf()
         #
         # tester.include_edit.setText("150, C")
         # tester.include_edit.editingFinished.emit()
         # tester.output_filepath_edit.setText(
-        #     str(sample_files.joinpath(r"Aspect ratio test\Run on effect - 150m plate, 10,000 S.PDF")))
+        #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 150m plate, 10,000 S.PDF")))
         # tester.print_pdf()
         #
         # tester.include_edit.setText("600, B")
         # tester.include_edit.editingFinished.emit()
         # tester.output_filepath_edit.setText(
-        #     str(sample_files.joinpath(r"Aspect ratio test\Run on effect - 600m plate, 1,000 S.PDF")))
+        #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 600m plate, 1,000 S.PDF")))
         # tester.print_pdf()
         #
-        # tester.include_edit.setText("600, C")
+        tester.include_edit.setText("600, C")
+        tester.include_edit.editingFinished.emit()
+        tester.output_filepath_edit.setText(
+            str(sample_files.joinpath(r"Run-on effect\On-time formula.PDF")))
+            # str(sample_files.joinpath(r"Run-on effect test\Run on effect - 600m plate, 10,000 S, full waveform.PDF")))
+        tester.print_pdf()
+
+    def plot_run_on_convergence():
+        """Plot the half-cycle convergence of run-on effect"""
+        tester.plot_run_on_convergence_rbtn.setChecked(True)
+
+        tester.test_name_edit.setText("Run-on Effect Convergence")
+        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\1050ms")),
+                       file_type='Maxwell')
+        tester.table.item(0, 2).setText("0.000001")
+
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Run-on effect\Run-on convergence - 150m plate, 1,000 S.PDF")))
+        # tester.include_edit.setText("150, B")
         # tester.include_edit.editingFinished.emit()
-        # tester.output_filepath_edit.setText(
-        #     str(sample_files.joinpath(r"Run-on effect test\On-time formula.PDF")))
-        #     # str(sample_files.joinpath(r"Run-on effect test\Run on effect - 600m plate, 10,000 S, full waveform.PDF")))
+        # tester.print_pdf()
+        #
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Run-on effect\Run-on convergence - 150m plate, 10,000 S.PDF")))
+        # tester.include_edit.setText("150, C")
+        # tester.include_edit.editingFinished.emit()
+        # tester.print_pdf()
+        #
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Run-on effect\Run-on convergence - 600m plate, 1,000 S.PDF")))
+        # tester.include_edit.setText("600, B")
+        # tester.include_edit.editingFinished.emit()
         # tester.print_pdf()
 
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Run-on effect\Run-on convergence - 600m plate, 10,000 S.PDF")))
+        tester.include_edit.setText("600, C")
+        tester.include_edit.editingFinished.emit()
+        tester.print_pdf()
 
+    def tabulate_run_on_convergence():
+        """Tabulate the number of half-cycles required for convergence of run-on effect"""
+        tester.table_run_on_convergence_rbtn.setChecked(True)
+
+        tester.test_name_edit.setText("Run-on Effect Convergence")
+        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\450ms")),
+                       file_type='Maxwell')
+        tester.table.item(0, 2).setText("0.000001")
+
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Run-on effect\Run-on Effect Convergence - 150m plate, 1,000 S.CSV")))
+        tester.include_edit.setText("150, B")
+        tester.include_edit.editingFinished.emit()
+        tester.print_pdf()
+        #
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Run-on effect\Run-on Effect Convergence - 150m plate, 10,000 S.CSV")))
+        # tester.include_edit.setText("150, C")
+        # tester.include_edit.editingFinished.emit()
+        # tester.print_pdf()
+        #
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Run-on effect\Run-on Effect Convergence - 600m plate, 1,000 S.CSV")))
+        # tester.include_edit.setText("600, B")
+        # tester.include_edit.editingFinished.emit()
+        # tester.print_pdf()
+        #
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Run-on effect\Run-on Effect Convergence - 600m plate, 10,000 S.CSV")))
+        # tester.include_edit.setText("600, C")
+        # tester.include_edit.editingFinished.emit()
+        # tester.print_pdf()
+
+    # plot_run_on_comparison()
     plot_run_on_convergence()
-    tabulate_run_on_convergence()
-    plot_run_on_comparison()
+    # tabulate_run_on_convergence()
 
-    tester.close()
+    # tester.close()
     app.exec_()
