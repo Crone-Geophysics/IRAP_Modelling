@@ -1826,7 +1826,7 @@ if __name__ == '__main__':
 
     # plot_run_on_comparison()
     # plot_run_on_convergence()
-    tabulate_run_on_convergence()
+    # tabulate_run_on_convergence()
 
-    tester.close()
+    # tester.close()
     app.exec_()
