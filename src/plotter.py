@@ -1337,9 +1337,8 @@ class TestRunner(QMainWindow, test_runnerUI):
                     #            df.iloc[8, ch]
 
                     # On-time calculation
-                    response = df.iloc[n + 0, ch] + df.iloc[1, ch] - df.iloc[n + 2, ch] + df.iloc[3, ch] + \
-                               df.iloc[n + 4, ch] - df.iloc[5, ch] - df.iloc[n + 6, ch] + df.iloc[7, ch] + \
-                               df.iloc[n + 8, ch]
+                    response = df.iloc[0, ch] - df.iloc[10, ch] - df.iloc[2, ch] + df.iloc[12, ch] + \
+                               df.iloc[4, ch] - df.iloc[14, ch] - df.iloc[6, ch] + df.iloc[16, ch] + df.iloc[8, ch]
                     decay.append(response)
 
                 # Include a test file for comparison
@@ -1471,44 +1470,47 @@ class TestRunner(QMainWindow, test_runnerUI):
                     file_comp_data.index = file_comp_data.STATION
                     df = file_comp_data.loc[station, channels]
                     df = df.T
-                    n = int(float(tem_file.off_time) / 50)  # Number of sequential 50ms timebases
+                    # n = int(float(tem_file.off_time) / 50)  # Number of sequential 50ms timebases
+                    #
+                    # terms = []
+                    # # Build the formula
+                    # for i in range(0, n):
+                    #     p = i % 4
+                    #     if p == 0:
+                    #         terms.append(df.iloc[i])
+                    #     elif p == 1:
+                    #         terms.append(- df.iloc[n + i])
+                    #     elif p == 2:
+                    #         terms.append(- df.iloc[i])
+                    #     else:
+                    #         terms.append(df.iloc[n + i])
+                    #
+                    # # Plot the data
+                    # xs = range(1, math.floor(n / 2) + 1)
+                    # responses = np.array([sum(terms[:2 * n]) for n in xs]) * properties['scaling']
 
+                    n = int(len(tem_file.ch_times) / 2)
                     terms = []
-                    # Build the formula
+                    count = 0
                     for i in range(0, n):
-                        p = i % 4
-                        if p == 0:
-                            terms.append(df.iloc[i])
-                        elif p == 1:
-                            terms.append(- df.iloc[n + i])
-                        elif p == 2:
-                            terms.append(- df.iloc[i])
+                        if i % 2 == 0:
+                            term = df.iloc[i] - df.iloc[n + i]
                         else:
-                            terms.append(df.iloc[n + i])
-
-                    terms = terms[:-1]
-                    # terms2 = [df.iloc[0],
-                    #          - df.iloc[n + 1],
-                    #          - df.iloc[2],
-                    #          df.iloc[n + 3],
-                    #          df.iloc[4],
-                    #          - df.iloc[n + 5],
-                    #          - df.iloc[6],
-                    #          df.iloc[n + 7],
-                    #          df.iloc[8]]
+                            term = -df.iloc[i] + df.iloc[n + i]
+                        terms.append(term)
 
                     # Plot the data
-                    xs = range(1, math.floor(n / 2) + 1)
-                    responses = np.array([sum(terms[:2 * n]) for n in xs]) * properties['scaling']
+                    xs = range(1, n + 1)
+                    responses = np.array([sum(terms[:i]) for i in range(1, n + 1)]) * properties['scaling']
 
-                    self.ax.plot(xs, responses,
+                    self.ax.plot(xs[:10], responses[:10],
                                  color=colors[component],
                                  alpha=properties['alpha'],
                                  label=f"{component} Component")
 
                     # Add the value of channel 44 from the comparisson file
                     base_file_channel_value = base_file_data.loc[station, "CH44"] * properties['scaling']
-                    self.ax.plot(xs, np.repeat(base_file_channel_value, math.floor(n / 2)),
+                    self.ax.plot(xs[:10], np.repeat(base_file_channel_value, len(xs[:10])),
                                  color=colors[component],
                                  ls='--',
                                  lw=1.,
@@ -1612,47 +1614,41 @@ class TestRunner(QMainWindow, test_runnerUI):
 
                     base_file_channel_value = base_file_data.loc[station, "CH44"] * properties['scaling']
 
-                    n = 9
-                    terms = [df.iloc[0],
-                             - df.iloc[n + 1],
-                             - df.iloc[2],
-                             df.iloc[n + 3],
-                             df.iloc[4],
-                             - df.iloc[n + 5],
-                             - df.iloc[6],
-                             df.iloc[n + 7],
-                             df.iloc[8]]
+                    n = int(len(tem_file.ch_times) / 2)
+                    terms = []
+                    for i in range(0, n):
+                        if i % 2 == 0:
+                            term = df.iloc[i] - df.iloc[n + i]
+                        else:
+                            term = -df.iloc[i] + df.iloc[n + i]
+                        terms.append(term)
 
-                    # Calculate the convergence
-                    xs = range(1, 6)
-                    responses = np.array([sum(terms[:2 * n]) for n in xs]) * properties['scaling']
+                    # Plot the data
+                    xs = range(1, n + 1)
+                    responses = np.array([sum(terms[:i]) for i in range(1, n + 1)]) * properties['scaling']
+
                     diff = base_file_channel_value - responses
                     convergence_df[f"{file.stem} - {component}"] = np.abs(diff)
 
                 count += 1
 
-            convergence_df = convergence_df.T.round(decimals=2).set_axis([str(num) for num in range(1, 6)], axis=1)
+            convergence_df = convergence_df.T.round(decimals=2).set_axis([str(num) for num in range(1, len(xs) + 1)],
+                                                                         axis=1)
 
             def find_convergence(row, thresh):
                 for ind, col in enumerate(row):
-                    print(F"Evaluating: \n{row[ind:]}")
                     if all([k < thresh for k in row[ind:]]):
-                        print(f"All values in {row[ind:]} are less than {thresh}.")
                         return ind + 1  # Guaranteed to happen at 5
 
             # Find the first column where all columns past it have a difference less than 1.
             convergences = []
-            convergences_05 = []
             for i, row in convergence_df.iterrows():
                 print(f"Items in row:\n{row}")
-                convergence = find_convergence(row, 1.)
+                convergence = find_convergence(row, 0.1)
                 convergences.append(convergence)
-                convergence05 = find_convergence(row, 0.1)
-                convergences_05.append(convergence05)
 
-            convergence_df['Required_half_cycles_1'] = convergences
-            convergence_df['Required_half_cycles_0.1'] = convergences_05
-            convergence_df.loc[:, ["Required_half_cycles_1", "Required_half_cycles_0.1"]].to_csv(output_filepath)
+            convergence_df['Required_half_cycles'] = convergences
+            convergence_df.loc[:, "Required_half_cycles"].to_csv(output_filepath)
             os.startfile(output_filepath)
 
         output_filepath = self.output_filepath_edit.text()
@@ -1700,7 +1696,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         elif self.plot_run_on_convergence_rbtn.isChecked():
             self.print_run_on_convergence(plotting_files, pdf_filepath)
         elif self.table_run_on_convergence_rbtn.isChecked():
-            self.table_run_on_convergence(plotting_files)
+            self.tablulate_run_on_convergence(plotting_files)
 
         print(f"Process complete after {(time.time() - t0) / 60:02.0f}:{(time.time() - t0) % 60:02.0f}")
 
@@ -1727,7 +1723,7 @@ if __name__ == '__main__':
         """Run the run-on effects tests"""
         tester.plot_run_on_comparison_rbtn.setChecked(True)
 
-        tester.test_name_edit.setText("Maxwell Aspect Ratio Test Run-on Effect Calculation")
+        tester.test_name_edit.setText("Maxwell Run-on Effect Calculation")
         tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\600x600C")),
                        file_type='Maxwell')
 
@@ -1767,70 +1763,70 @@ if __name__ == '__main__':
         tester.plot_run_on_convergence_rbtn.setChecked(True)
 
         tester.test_name_edit.setText("Run-on Effect Convergence")
-        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\1050ms")),
+        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\100s")),
                        file_type='Maxwell')
         tester.table.item(0, 2).setText("0.000001")
 
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect\Run-on convergence - 150m plate, 1,000 S.PDF")))
-        # tester.include_edit.setText("150, B")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Run-on effect\Run-on convergence - 150m plate, 1,000 S.PDF")))
+        tester.include_edit.setText("150, B")
+        tester.include_edit.editingFinished.emit()
+        tester.print_pdf()
         #
         # tester.output_filepath_edit.setText(str(sample_files.joinpath(
         #     r"Run-on effect\Run-on convergence - 150m plate, 10,000 S.PDF")))
         # tester.include_edit.setText("150, C")
         # tester.include_edit.editingFinished.emit()
         # tester.print_pdf()
-        #
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect\Run-on convergence - 600m plate, 1,000 S.PDF")))
-        # tester.include_edit.setText("600, B")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
 
         tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect\Run-on convergence - 600m plate, 10,000 S.PDF")))
-        tester.include_edit.setText("600, C")
+            r"Run-on effect\Run-on convergence - 600m plate, 1,000 S.PDF")))
+        tester.include_edit.setText("600, B")
         tester.include_edit.editingFinished.emit()
         tester.print_pdf()
+
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Run-on effect\Run-on convergence - 600m plate, 10,000 S.PDF")))
+        # tester.include_edit.setText("600, C")
+        # tester.include_edit.editingFinished.emit()
+        # tester.print_pdf()
 
     def tabulate_run_on_convergence():
         """Tabulate the number of half-cycles required for convergence of run-on effect"""
         tester.table_run_on_convergence_rbtn.setChecked(True)
 
         tester.test_name_edit.setText("Run-on Effect Convergence")
-        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\450ms")),
+        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\100s")),
                        file_type='Maxwell')
         tester.table.item(0, 2).setText("0.000001")
 
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect\Run-on Effect Convergence - 150m plate, 1,000 S.CSV")))
-        tester.include_edit.setText("150, B")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
-        #
         # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect\Run-on Effect Convergence - 150m plate, 10,000 S.CSV")))
-        # tester.include_edit.setText("150, C")
+        #     r"Run-on effect\Run-on Effect Convergence - 150m plate, 1,000 S.CSV")))
+        # tester.include_edit.setText("150, B")
         # tester.include_edit.editingFinished.emit()
         # tester.print_pdf()
-        #
+
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Run-on effect\Run-on Effect Convergence - 150m plate, 10,000 S.CSV")))
+        tester.include_edit.setText("150, C")
+        tester.include_edit.editingFinished.emit()
+        tester.print_pdf()
+
         # tester.output_filepath_edit.setText(str(sample_files.joinpath(
         #     r"Run-on effect\Run-on Effect Convergence - 600m plate, 1,000 S.CSV")))
         # tester.include_edit.setText("600, B")
         # tester.include_edit.editingFinished.emit()
         # tester.print_pdf()
-        #
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect\Run-on Effect Convergence - 600m plate, 10,000 S.CSV")))
-        # tester.include_edit.setText("600, C")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
+
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Run-on effect\Run-on Effect Convergence - 600m plate, 10,000 S.CSV")))
+        tester.include_edit.setText("600, C")
+        tester.include_edit.editingFinished.emit()
+        tester.print_pdf()
 
     # plot_run_on_comparison()
-    plot_run_on_convergence()
-    # tabulate_run_on_convergence()
+    # plot_run_on_convergence()
+    tabulate_run_on_convergence()
 
-    # tester.close()
+    tester.close()
     app.exec_()
