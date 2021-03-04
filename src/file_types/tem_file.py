@@ -319,10 +319,18 @@ class TEMFile:
         # print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
+    def get_range(self):
+        channels = [f'CH{num}' for num in range(1, len(self.ch_times) + 1)]
+        data = self.data.loc[:, channels]
+        mx = data.max().max()
+        mn = data.min().min()
+        return mn, mx
+
 
 if __name__ == '__main__':
     tem = TEMFile()
 
     sample_files = Path(__file__).parents[2].joinpath('sample_files')
-    file = sample_files.joinpath(r'Maxwell files\V_1x1_450_50_100 50msec instant on-time first.tem')
+    file = sample_files.joinpath(r'Two-way induction\300x100\100S\100S - Loop=0.TEM')
     tem_file = tem.parse(file)
+    tem_file.get_range()

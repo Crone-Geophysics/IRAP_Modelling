@@ -1016,14 +1016,54 @@ class TestRunner(QMainWindow, test_runnerUI):
         def plot_peter(filepath, component):
             raise NotImplementedError(F"Peter files haven't been implement yet.")
 
+        def get_fixed_range():
+            """Find the Y range of each file"""
+            progress.setLabelText("Calculating Ranges")
+            max_parser = TEMFile()
+            plate_parser = PlateFFile()
+            mun_parser = MUNFile()
+            count = 0
+
+            mins, maxs = [], []
+            for max_filepath in plotting_files["Maxwell"]:
+                if progress.wasCanceled():
+                    break
+
+                max_file = max_parser.parse(max_filepath)
+                rng = max_file.get_range()
+                mins.append(rng[0] * self.get_plotting_info('Maxwell')["scaling"])
+                maxs.append(rng[1] * self.get_plotting_info('Maxwell')["scaling"])
+
+                count += 1
+                progress.setValue(count)
+
+            for plate_filepath in plotting_files["PLATE"]:
+                if progress.wasCanceled():
+                    break
+
+                plate_file = plate_parser.parse(plate_filepath)
+                rng = plate_file.get_range()
+                mins.append(rng[0] * self.get_plotting_info('PLATE')["scaling"])
+                maxs.append(rng[1] * self.get_plotting_info('PLATE')["scaling"])
+
+                count += 1
+                progress.setValue(count)
+
+            return min(mins), max(maxs)
+
         self.ax2.get_yaxis().set_visible(False)
         self.ax.tick_params(axis='y', labelcolor='k')
         progress = QProgressDialog("Processing...", "Cancel", 0, int(num_files_found))
         progress.setWindowModality(QtCore.Qt.WindowModal)
         progress.setWindowTitle("Printing Profiles")
         progress.show()
-        count = 0
 
+        if self.fixed_range_cbox.isChecked():
+            y_range = np.array(get_fixed_range())
+
+        count = 0
+        progress.setValue(count)
+        progress.setLabelText("Printing Profile Plots")
         with PdfPages(pdf_filepath) as pdf:
             for maxwell_file, mun_file, peter_file, plate_file in list(zip_longest(*plotting_files.values(),
                                                                                    fillvalue=None))[:]:
@@ -1052,6 +1092,8 @@ class TestRunner(QMainWindow, test_runnerUI):
 
                     if self.custom_stations_cbox.isChecked():
                         self.ax.set_xlim([self.station_start_sbox.value(), self.station_end_sbox.value()])
+                    if self.fixed_range_cbox.isChecked():
+                        self.ax.set_ylim([y_range[0], y_range[1]])
 
                     # Create the legend
                     handles, labels = self.ax.get_legend_handles_labels()
@@ -1719,6 +1761,28 @@ if __name__ == '__main__':
     tester = TestRunner()
     tester.show()
 
+    def plot_two_way_induction():
+        tester.test_name_edit.setText(r"Two-Way Induction - 300mx100m Plate")
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Two-Way Induction\300x100 Two-Way Induction (100S, Fixed Y).PDF")))
+        tester.fixed_range_cbox.setChecked(True)
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Two-Way Induction\300x100 Two-Way Induction (100S).PDF")))
+
+        # Maxwell
+        maxwell_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\Maxwell")
+        tester.add_row(str(maxwell_dir), "Maxwell")
+        tester.table.item(0, 2).setText("0.000001")
+        tester.table.item(0, 4).setText("21")
+        tester.table.item(0, 5).setText("44")
+
+        # Plate
+        plate_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\PLATE")
+        tester.add_row(str(plate_dir), "PLATE")
+        tester.table.item(1, 6).setText("0.5")
+
+        tester.print_pdf()
+
     def plot_run_on_comparison():
         """Run the run-on effects tests"""
         tester.plot_run_on_comparison_rbtn.setChecked(True)
@@ -1824,9 +1888,10 @@ if __name__ == '__main__':
         tester.include_edit.editingFinished.emit()
         tester.print_pdf()
 
+    plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
 
-    # tester.close()
+    tester.close()
     app.exec_()

@@ -184,10 +184,18 @@ class PlateFFile:
         # print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
+    def get_range(self):
+        channels = [f'{num}' for num in range(1, len(self.ch_times) + 1)]
+        data = self.data.loc[:, channels]
+        mn = data.min().min()
+        mx = data.max().max()
+        return mn, mx
+
 
 if __name__ == '__main__':
     platef = PlateFFile()
 
     sample_files = Path(__file__).parents[2].joinpath('sample_files')
     file = sample_files.joinpath(r'PLATEF files\450_50.dat')
-    parsed_file = platef.parse(file)
+    plate_file = platef.parse(file)
+    plate_file.get_range()
