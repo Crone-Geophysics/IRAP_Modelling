@@ -27,7 +27,7 @@ from src.file_types.mun_file import MUNFile, MUNTab
 from PyQt5 import (QtCore, QtGui, uic)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
                              QTableWidgetItem, QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QLineEdit,
-                             QProgressDialog, QWidget, QHeaderView)
+                             QProgressDialog, QWidget, QHeaderView, QPushButton, QColorDialog)
 
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
@@ -56,6 +56,58 @@ quant_colors = np.nditer(np.array(plt.rcParams['axes.prop_cycle'].by_key()['colo
 # iter_colors = np.nditer(quant_colors)
 # quant_colors = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 # color = iter(cm.tab10())
+
+
+class ColorButton(QPushButton):
+    """
+    Custom Qt Widget to show a chosen color.
+
+    Left-clicking the button shows the color-chooser, while
+    right-clicking resets the color to None (no-color).
+    """
+
+    colorChanged = QtCore.pyqtSignal(object)
+
+    def __init__(self, *args, color=None, **kwargs):
+        super(ColorButton, self).__init__(*args, **kwargs)
+
+        self.setObjectName("btn")  # Add name so when the button is colored, the QColorDialog won't change with it.
+        self._color = None
+        self._default = color
+        self.pressed.connect(self.onColorPicker)
+
+        # Set the initial/default state.
+        self.setColor(self._default)
+
+    def setColor(self, color):
+        if color != self._color:
+            self._color = color
+            self.colorChanged.emit(color)
+
+        if self._color:
+            self.setStyleSheet("QPushButton#btn"
+                               "{"
+                               f"background-color: {self._color};"
+                               "}")
+        else:
+            self.setStyleSheet("")
+
+    def color(self):
+        return self._color
+
+    def onColorPicker(self):
+        dlg = QColorDialog(self)
+        if self._color:
+            dlg.setCurrentColor(QtGui.QColor(self._color))
+
+        if dlg.exec_():
+            self.setColor(dlg.currentColor().name())
+
+    def mousePressEvent(self, e):
+        if e.button() == QtCore.Qt.RightButton:
+            self.setColor(self._default)
+
+        return super(ColorButton, self).mousePressEvent(e)
 
 
 class FEMPlotter(QMainWindow, fem_plotterUI):
@@ -660,11 +712,12 @@ class TestRunner(QMainWindow, test_runnerUI):
         self.msg = QMessageBox()
 
         self.opened_files = []
+        self.color_pickers = []
         self.units = ''
         self.footnote = ''
 
         self.header_labels = ['Folder', 'File Type', 'Data Scaling', 'Station Shift', 'Channel Start', 'Channel End',
-                              'Alpha', 'Files Found', 'Remove']
+                              'Color', 'Alpha', 'Files Found', 'Remove']
         self.table.setColumnCount(len(self.header_labels))
         self.table.setHorizontalHeaderLabels(self.header_labels)
         # Set the first column to stretch
@@ -698,19 +751,21 @@ class TestRunner(QMainWindow, test_runnerUI):
             print(f"Removing row {row}.")
             self.table.removeRow(row)
             self.opened_files.pop(row)
+            self.color_pickers.pop(row)
 
     def add_row(self, folderpath=None, file_type=None):
         """Add a row to the table"""
         # File type options with extensions
         options = {"Maxwell": "*.TEM", "MUN": "*.DAT", "Peter": "*.XYZ", "PLATE": "*.DAT"}
+        colors = {"Maxwell": '#0000FF', "PLATE": '#FF0000', "MUN": '##00FF00'}
 
-        # Don't include filetypes that are already selected
-        existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
-                              for row in range(self.table.rowCount())]
-        for type in existing_filetypes:
-            print(f"{type} already opened, removing from options.")
-            del options[type]
-            print(f"New options: {options}")
+        # # Don't include filetypes that are already selected
+        # existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
+        #                       for row in range(self.table.rowCount())]
+        # for type in existing_filetypes:
+        #     print(f"{type} already opened, removing from options.")
+        #     del options[type]
+        #     print(f"New options: {options}")
 
         # Don't add any  more rows if all file types have been selected
         if len(options) == 0:
@@ -737,7 +792,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             self.table.insertRow(row)
 
             # Create default items for each column
-            path_item = QTableWidgetItem(folderpath)
+            path_item = QTableWidgetItem(str(folderpath))
             path_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
             file_type_item = QTableWidgetItem(file_type)
             file_type_item.setFlags(QtCore.Qt.ItemIsSelectable | QtCore.Qt.ItemIsEnabled)
@@ -745,13 +800,18 @@ class TestRunner(QMainWindow, test_runnerUI):
             station_shift = QTableWidgetItem("0")
             start_ch = QTableWidgetItem("1")
             end_ch = QTableWidgetItem("99")
+            color_picker = ColorButton(color=colors[file_type])
+            self.color_pickers.append(color_picker)
             alpha = QTableWidgetItem("1.0")
 
             # Fill the row information
             for col, item in enumerate([path_item, file_type_item, data_scaling, station_shift, start_ch, end_ch,
-                                        alpha]):
-                item.setTextAlignment(QtCore.Qt.AlignCenter)
-                self.table.setItem(row, col, item)
+                                        color_picker, alpha]):
+                if item == color_picker:
+                    self.table.setCellWidget(row, col, color_picker)
+                else:
+                    item.setTextAlignment(QtCore.Qt.AlignCenter)
+                    self.table.setItem(row, col, item)
 
             # Add the remove button
             """ To have an icon in the center of the cell, need to create a label and place it in a widget and 
@@ -803,19 +863,20 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             self.opened_files.append(files)
 
-    def get_plotting_info(self, file_type):
+    def get_plotting_info(self, row):
         """Return the plotting information for a file type"""
 
-        # Find which row the file_type is on
-        existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
-                              for row in range(self.table.rowCount())]
-        row = existing_filetypes.index(file_type)
+        # # Find which row the file_type is on
+        # existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
+        #                       for row in range(self.table.rowCount())]
+        # row = existing_filetypes.index(file_type)
 
         result = dict()
         result['scaling'] = float(self.table.item(row, self.header_labels.index('Data Scaling')).text())
         result['station_shift'] = float(self.table.item(row, self.header_labels.index('Station Shift')).text())
         result['ch_start'] = int(float(self.table.item(row, self.header_labels.index('Channel Start')).text()))
         result['ch_end'] = int(float(self.table.item(row, self.header_labels.index('Channel End')).text()))
+        result['color'] = self.table.item(row, self.header_labels.index('Color')).color()
         result['alpha'] = float(self.table.item(row, self.header_labels.index('Alpha')).text())
         return result
 
@@ -838,7 +899,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             print(f"Plotting {filepath.name}.")
             properties = self.get_plotting_info('Maxwell')  # Plotting properties
-            color = 'b'
+            color = properties["color"]
             if not self.units:
                 self.units = file.units
             else:
@@ -1888,10 +1949,11 @@ if __name__ == '__main__':
         tester.include_edit.editingFinished.emit()
         tester.print_pdf()
 
-    plot_two_way_induction()
+    # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
 
-    tester.close()
+    tester.add_row(sample_files.joinpath(r"Aspect ratio test\Maxwell"))
+    # tester.close()
     app.exec_()
