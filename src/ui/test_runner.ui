@@ -89,6 +89,13 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QCheckBox" name="log_y_cbox">
+            <property name="text">
+             <string>Log Y</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>
@@ -342,8 +349,20 @@
      <height>21</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionConvert_Peter_File"/>
+   </widget>
+   <addaction name="menuFile"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
+  <action name="actionConvert_Peter_File">
+   <property name="text">
+    <string>Convert Peter File</string>
+   </property>
+  </action>
  </widget>
  <resources/>
  <connections/>

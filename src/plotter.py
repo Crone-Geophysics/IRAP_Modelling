@@ -23,6 +23,7 @@ from matplotlib.ticker import MaxNLocator
 from src.file_types.fem_file import FEMFile, FEMTab
 from src.file_types.tem_file import TEMFile, TEMTab
 from src.file_types.platef_file import PlateFFile, PlateFTab
+from src.file_types.peter_file import PeterFile
 from src.file_types.mun_file import MUNFile, MUNTab
 from PyQt5 import (QtCore, QtGui, uic)
 from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
@@ -726,10 +727,10 @@ class TestRunner(QMainWindow, test_runnerUI):
 
         # Figures
         self.figure, self.ax = plt.subplots()
-        self.ax2 = self.ax.twinx()  # second axes that shares the same x-axis for decay plots
-        self.ax2.get_shared_x_axes().join(self.ax, self.ax2)
-        self.ax2.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
-        self.ax2.tick_params(axis='y', which='major', labelcolor='tab:red')
+        # self.ax2 = self.ax.twinx()  # second axes that shares the same x-axis for decay plots
+        # self.ax2.get_shared_x_axes().join(self.ax, self.ax2)
+        # self.ax2.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
+        # self.ax2.tick_params(axis='y', which='major', labelcolor='tab:red')
         # self.ax2.yaxis.set_minor_formatter(FormatStrFormatter("%.0f"))
         self.figure.set_size_inches((11, 8.5))
 
@@ -738,6 +739,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             self.output_filepath_edit.setText(str(Path(filepath).with_suffix(".PDF")))
 
         # Signals
+        self.actionConvert_Peter_File.triggered.connect(self.open_peter_converter)
         self.add_folder_btn.clicked.connect(self.add_row)
         self.change_pdf_path_btn.clicked.connect(change_pdf_path)
         self.table.cellClicked.connect(self.cell_clicked)
@@ -753,19 +755,31 @@ class TestRunner(QMainWindow, test_runnerUI):
             self.opened_files.pop(row)
             self.color_pickers.pop(row)
 
+    def open_peter_converter(self):
+        """
+        Convert a Peter File (.txt) to a .csv file for each model inside. Saves to the same directory.
+        """
+        default_path = str(Path(__file__).parents[1].joinpath('sample_files'))
+        dlg = QFileDialog()
+        peter_file, ext = dlg.getOpenFileName(self, "Select Peter File", default_path, "Peter Files (*.txt)")
+
+        if peter_file:
+            parser = PeterFile()
+            parser.convert(peter_file)
+
     def add_row(self, folderpath=None, file_type=None):
         """Add a row to the table"""
         # File type options with extensions
         options = {"Maxwell": "*.TEM", "MUN": "*.DAT", "Peter": "*.XYZ", "PLATE": "*.DAT"}
-        colors = {"Maxwell": '#0000FF', "PLATE": '#FF0000', "MUN": '##00FF00'}
+        colors = {"Maxwell": '#0000FF', "MUN": '##00FF00', "Peter": "#2C2C2C", "PLATE": '#FF0000'}
 
-        # # Don't include filetypes that are already selected
-        # existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
-        #                       for row in range(self.table.rowCount())]
-        # for type in existing_filetypes:
-        #     print(f"{type} already opened, removing from options.")
-        #     del options[type]
-        #     print(f"New options: {options}")
+        # Don't include filetypes that are already selected
+        existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
+                              for row in range(self.table.rowCount())]
+        for type in existing_filetypes:
+            print(f"{type} already opened, removing from options.")
+            del options[type]
+            print(f"New options: {options}")
 
         # Don't add any  more rows if all file types have been selected
         if len(options) == 0:
@@ -863,20 +877,21 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             self.opened_files.append(files)
 
-    def get_plotting_info(self, row):
+    def get_plotting_info(self, file_type):
         """Return the plotting information for a file type"""
 
-        # # Find which row the file_type is on
-        # existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
-        #                       for row in range(self.table.rowCount())]
-        # row = existing_filetypes.index(file_type)
+        # Find which row the file_type is on
+        existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
+                              for row in range(self.table.rowCount())]
+        row = existing_filetypes.index(file_type)
 
         result = dict()
         result['scaling'] = float(self.table.item(row, self.header_labels.index('Data Scaling')).text())
         result['station_shift'] = float(self.table.item(row, self.header_labels.index('Station Shift')).text())
         result['ch_start'] = int(float(self.table.item(row, self.header_labels.index('Channel Start')).text()))
         result['ch_end'] = int(float(self.table.item(row, self.header_labels.index('Channel End')).text()))
-        result['color'] = self.table.item(row, self.header_labels.index('Color')).color()
+        result['color'] = self.color_pickers[row].color()
+        # result['color'] = self.table.item(row, self.header_labels.index('Color')).color()  # Doesn't work???
         result['alpha'] = float(self.table.item(row, self.header_labels.index('Alpha')).text())
         return result
 
@@ -960,7 +975,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             print(f"Plotting {filepath.name}.")
             properties = self.get_plotting_info('PLATE')  # Plotting properties
-            color = 'r'
+            color = properties["color"]
             if not self.units:
                 self.units = file.units
             else:
@@ -1024,7 +1039,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             print(f"Plotting {filepath.name}.")
             properties = self.get_plotting_info('MUN')  # Plotting properties
-            color = 'g'
+            color = properties["color"]
             if not self.units:
                 self.units = file.units
             else:
@@ -1112,8 +1127,8 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             return min(mins), max(maxs)
 
-        self.ax2.get_yaxis().set_visible(False)
-        self.ax.tick_params(axis='y', labelcolor='k')
+        # self.ax2.get_yaxis().set_visible(False)
+        # self.ax.tick_params(axis='y', labelcolor='k')
         progress = QProgressDialog("Processing...", "Cancel", 0, int(num_files_found))
         progress.setWindowModality(QtCore.Qt.WindowModal)
         progress.setWindowTitle("Printing Profiles")
@@ -1196,7 +1211,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             print(f"Plotting {filepath.name}.")
             properties = self.get_plotting_info('Maxwell')  # Plotting properties
-            color = 'b'
+            color = properties["color"]
             if not self.units:
                 self.units = file.units
             else:
@@ -1238,11 +1253,11 @@ class TestRunner(QMainWindow, test_runnerUI):
                          label="Linear-scale",
                          zorder=1)
 
-            self.ax2.plot(x, decay,
-                          color='tab:red',
-                          alpha=properties['alpha'],
-                          label="Logarithmic-scale",
-                          zorder=1)
+            # self.ax2.plot(x, decay,
+            #               color='tab:red',
+            #               alpha=properties['alpha'],
+            #               label="Logarithmic-scale",
+            #               zorder=1)
 
         def plot_plate(filepath, component):
             raise NotImplementedError("PLATE decay plots not implemented yet.")
@@ -1253,7 +1268,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         def plot_peter(filepath, component):
             raise NotImplementedError("Peter decay plots not implemented yet.")
 
-        self.ax2.get_yaxis().set_visible(True)
+        # self.ax2.get_yaxis().set_visible(True)
         self.ax.tick_params(axis='y', labelcolor='blue')
         progress = QProgressDialog("Processing...", "Cancel", 0, int(num_files_found))
         progress.setWindowModality(QtCore.Qt.WindowModal)
@@ -1323,10 +1338,9 @@ class TestRunner(QMainWindow, test_runnerUI):
 
                     # Create the legend
                     handles, labels = self.ax.get_legend_handles_labels()
-                    handles2, labels2 = self.ax2.get_legend_handles_labels()
-
-                    handles.extend(handles2)
-                    labels.extend(labels2)
+                    # handles2, labels2 = self.ax2.get_legend_handles_labels()
+                    # handles.extend(handles2)
+                    # labels.extend(labels2)
 
                     if handles:
                         # sort both labels and handles by labels
@@ -1343,8 +1357,8 @@ class TestRunner(QMainWindow, test_runnerUI):
                     # plt.show()
                     pdf.savefig(self.figure, orientation='landscape')
                     self.ax.clear()
-                    self.ax2.clear()
-                    self.ax2.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
+                    # self.ax2.clear()
+                    # self.ax2.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
                     # self.ax2.yaxis.set_minor_formatter(FormatStrFormatter("%.0f"))
 
                 count += 1
@@ -1366,10 +1380,11 @@ class TestRunner(QMainWindow, test_runnerUI):
             :param pdf: str, PDF file to save to.
             """
             print(f"Printing Maxwell run-on effect")
-            self.ax2.get_yaxis().set_visible(False)
+            # self.ax2.get_yaxis().set_visible(False)
             self.ax.tick_params(axis='y', labelcolor='k')
 
             properties = self.get_plotting_info('Maxwell')  # Plotting properties
+            color = properties["color"]
 
             progress = QProgressDialog("Parsing TEM files", "Cancel", 0, len(files))
             progress.setWindowModality(QtCore.Qt.WindowModal)
@@ -1418,7 +1433,6 @@ class TestRunner(QMainWindow, test_runnerUI):
 
                 # Find the station where the response is highest
                 station = last_ch_data.idxmax()
-                # station = 2
                 self.footnote += f"Maxwell file plotting station {station}.  "
                 print(f"Plotting station {station}.")
 
@@ -1439,6 +1453,8 @@ class TestRunner(QMainWindow, test_runnerUI):
                     #            df.iloc[4, ch] - df.iloc[n + 5, ch] - df.iloc[6, ch] + df.iloc[n + 7, ch] + \
                     #            df.iloc[8, ch]
 
+                    # response = F[0] - F[n + 1] - F[2] + F[n + 3] + F[4] - F[n + 5] - F[6] + F[n + 7] + F[8]
+
                     # On-time calculation
                     response = df.iloc[0, ch] - df.iloc[10, ch] - df.iloc[2, ch] + df.iloc[12, ch] + \
                                df.iloc[4, ch] - df.iloc[14, ch] - df.iloc[6, ch] + df.iloc[16, ch] + df.iloc[8, ch]
@@ -1446,7 +1462,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
                 # Include a test file for comparison
                 parser = TEMFile()
-                base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio test\Maxwell\2m stations')
+                base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio\Maxwell\2m stations')
                 other_file = parser.parse(base_folder.joinpath(r'600x600C.tem'))
                 other_file_data = other_file.data[other_file.data.COMPONENT == component]
                 other_file_data.index = other_file_data.STATION
@@ -1456,7 +1472,7 @@ class TestRunner(QMainWindow, test_runnerUI):
                 x = base_file.ch_times[min_ch: max_ch + 1]
                 decay = np.array(decay) * properties['scaling']
                 # self.ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
-                self.ax.plot(x, decay, color='b', label="Calculated", alpha=properties['alpha'])
+                self.ax.plot(x, decay, color=color, label="Calculated", alpha=properties['alpha'])
                 self.ax.plot(x, other_file_decay, color='r', label="600x600C", alpha=0.6)
 
                 # Set the labels
@@ -1528,14 +1544,14 @@ class TestRunner(QMainWindow, test_runnerUI):
             for file in files:
                 print(f"Plotting {file.name} ({count}/{len(files)}).")
                 self.footnote = ''
-                self.ax2.get_yaxis().set_visible(False)
+                # self.ax2.get_yaxis().set_visible(False)
                 self.ax.tick_params(axis='y', labelcolor='k')
 
                 tem_file = TEMFile()
                 tem_file.parse(file)
 
                 # Find the comparison file
-                base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio test\Maxwell\2m stations')
+                base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio\Maxwell\2m stations')
                 other_file = base_folder.joinpath(file.name)
                 if not other_file.is_file():
                     print(f"Cannot find {other_file}.")
@@ -1649,7 +1665,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
         os.startfile(pdf_filepath)
 
-    def tablulate_run_on_convergence(self, plotting_files):
+    def tabulate_run_on_convergence(self, plotting_files):
 
         def tabulate_maxwell_convergence(files):
             """
@@ -1670,14 +1686,14 @@ class TestRunner(QMainWindow, test_runnerUI):
             for file in files:
                 print(f"Plotting {file.name} ({count}/{len(files)}).")
                 self.footnote = ''
-                self.ax2.get_yaxis().set_visible(False)
+                # self.ax2.get_yaxis().set_visible(False)
                 self.ax.tick_params(axis='y', labelcolor='k')
 
                 tem_file = TEMFile()
                 tem_file.parse(file)
 
                 # Find the comparison file
-                base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio test\Maxwell\2m stations')
+                base_folder = Path(__file__).parents[1].joinpath(r'sample_files\Aspect ratio\Maxwell\2m stations')
                 other_file = base_folder.joinpath(file.name)
                 if not other_file.is_file():
                     print(f"Cannot find {other_file}.")
@@ -1790,6 +1806,17 @@ class TestRunner(QMainWindow, test_runnerUI):
         if not any(plotting_files.values()):
             raise ValueError("No plotting files found.")
 
+        if self.log_y_cbox.isChecked():
+            if self.plot_profiles_rbtn.isChecked():
+                self.ax.set_yscale('symlog',
+                                   linthresh=10,
+                                   linscale=1. / math.log(10),
+                                   subs=list(np.arange(2, 10, 1)))
+            else:
+                self.ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
+        else:
+            self.ax.set_yscale('linear')
+
         if self.plot_profiles_rbtn.isChecked():
             self.print_profiles(num_files_found, plotting_files, pdf_filepath)
         elif self.plot_decays_rbtn.isChecked():
@@ -1799,7 +1826,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         elif self.plot_run_on_convergence_rbtn.isChecked():
             self.print_run_on_convergence(plotting_files, pdf_filepath)
         elif self.table_run_on_convergence_rbtn.isChecked():
-            self.tablulate_run_on_convergence(plotting_files)
+            self.tabulate_run_on_convergence(plotting_files)
 
         print(f"Process complete after {(time.time() - t0) / 60:02.0f}:{(time.time() - t0) % 60:02.0f}")
 
@@ -1809,20 +1836,42 @@ if __name__ == '__main__':
 
     app = QApplication(sys.argv)
 
-    # fpl = FEMPlotter()
-    # fpl.show()
-    # tpl = TEMPlotter()
-    # tpl.show()
-
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
 
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
-    # tem_file = sample_files.joinpath(r'Aspect ratio test\Maxwell\5x150A.TEM')
+    # tem_file = sample_files.joinpath(r'Aspect ratio\Maxwell\5x150A.TEM')
 
     tester = TestRunner()
     tester.show()
 
+    def plot_aspect_ratio():
+        tester.plot_profiles_rbtn.setChecked(True)
+        tester.test_name_edit.setText(r"Aspect Ratio")
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Aspect Ratio\Aspect Ratio.PDF")))
+        # tester.fixed_range_cbox.setChecked(True)
+
+        # Maxwell
+        maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
+        tester.add_row(str(maxwell_dir), "Maxwell")
+        tester.table.item(0, 2).setText("0.000001")
+        tester.table.item(0, 4).setText("21")
+        tester.table.item(0, 5).setText("44")
+
+        # Plate
+        plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
+        tester.add_row(str(plate_dir), "PLATE")
+        tester.table.item(1, 7).setText("0.5")
+
+        # Peter
+        plate_dir = sample_files.joinpath(r"Aspect Ratio\Peter")
+        tester.add_row(str(plate_dir), "Peter")
+        tester.table.item(1, 7).setText("0.5")
+
+        tester.print_pdf()
+
     def plot_two_way_induction():
+        tester.plot_profiles_rbtn.setChecked(True)
         tester.test_name_edit.setText(r"Two-Way Induction - 300mx100m Plate")
         tester.output_filepath_edit.setText(str(sample_files.joinpath(
             r"Two-Way Induction\300x100 Two-Way Induction (100S, Fixed Y).PDF")))
@@ -1840,7 +1889,7 @@ if __name__ == '__main__':
         # Plate
         plate_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\PLATE")
         tester.add_row(str(plate_dir), "PLATE")
-        tester.table.item(1, 6).setText("0.5")
+        tester.table.item(1, 7).setText("0.5")
 
         tester.print_pdf()
 
@@ -1949,11 +1998,13 @@ if __name__ == '__main__':
         tester.include_edit.editingFinished.emit()
         tester.print_pdf()
 
+    # plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
 
-    tester.add_row(sample_files.joinpath(r"Aspect ratio test\Maxwell"))
+    tester.open_peter_converter()
+    # tester.add_row(sample_files.joinpath(r"Aspect ratio\Maxwell"))
     # tester.close()
     app.exec_()
