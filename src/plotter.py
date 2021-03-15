@@ -1998,6 +1998,7 @@ if __name__ == '__main__':
         tester.include_edit.editingFinished.emit()
         tester.print_pdf()
 
+    # TODO Change "MUN" to "EM3D"
     # plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
