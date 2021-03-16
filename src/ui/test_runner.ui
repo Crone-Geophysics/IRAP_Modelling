@@ -353,14 +353,14 @@
     <property name="title">
      <string>File</string>
     </property>
-    <addaction name="actionConvert_Peter_File"/>
+    <addaction name="actionConvert_IRAP_File"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="actionConvert_Peter_File">
+  <action name="actionConvert_IRAP_File">
    <property name="text">
-    <string>Convert Peter File</string>
+    <string>Convert IRAP File</string>
    </property>
   </action>
  </widget>

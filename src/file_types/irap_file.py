@@ -10,7 +10,7 @@ from io import StringIO
 from src.file_types.base_tdem_widget import BaseTDEM
 
 
-class PeterTab(BaseTDEM):
+class IRAPTab(BaseTDEM):
 
     def __init__(self, parent=None, axes=None):
         raise NotImplementedError()
@@ -129,9 +129,9 @@ class PeterTab(BaseTDEM):
         self.plot_changed_sig.emit()
 
 
-class PeterFile:
+class IRAPFile:
     """
-    Peter file object
+    IRAP file object
     """
 
     def __init__(self):
@@ -259,11 +259,11 @@ class PeterFile:
 
 
 if __name__ == '__main__':
-    peter_file_parser = PeterFile()
+    irap_file_parser = IRAPFile()
 
     sample_files = Path(__file__).parents[2].joinpath('sample_files')
     # file = sample_files.joinpath(r'Aspect ratio\Peter\2021-03-11_MUN_150m_ModelGroup.txt')
     # peter_file = peter_file_parser.convert(file)
     file = sample_files.joinpath(r'Aspect ratio\Peter\50x150A.dat')
-    peter_file = peter_file_parser.parse(file)
-    peter_file.get_range()
+    irap_file = irap_file_parser.parse(file)
+    irap_file.get_range()
