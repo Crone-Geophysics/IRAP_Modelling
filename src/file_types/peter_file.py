@@ -5,6 +5,7 @@ import pandas as pd
 import re
 from PyQt5.QtWidgets import (QLabel)
 from natsort import natsorted
+from io import StringIO
 
 from src.file_types.base_tdem_widget import BaseTDEM
 
@@ -137,41 +138,45 @@ class PeterFile:
         self.filepath = None
 
         self.ch_times = pd.DataFrame()
-        self.on_time = None
-        self.pulse_time = None
-        self.survey_type = None
-        self.units = 'nT/s'
-        self.data = []
+        self.name = None
+        self.x_dim = None
+        self.y_dim = None
+        self.conductance = None
+        self.data = pd.DataFrame()
         self.components = []
 
-    def convert(self, filepath):
-        self.filepath = Path(filepath)
+    @staticmethod
+    def convert(filepath):
+        """
+        Create a txt file for each model inside Peter's text file. Saves the files in the same directory.
+        :param filepath: Path or str
+        """
+        if not filepath.is_file():
+            raise ValueError(f"{filepath} is not a file.")
 
-        if not self.filepath.is_file():
-            raise ValueError(f"{self.filepath} is not a file.")
-
-        print(f"Parsing {self.filepath.name}")
+        print(f"Converting {filepath.name}")
         with open(filepath, 'r') as file:
             content = file.read()
-            # split_content = content.split('\n')
 
-        waveform_match = re.split(r"Current waveform:", content)[-1].split("DONE")[0].split("\n")
-        waveform = [string.split() for string in waveform_match]
-        waveform = pd.DataFrame(waveform).dropna().iloc[:, 3].astype(float)
+        # waveform_match = re.split(r"Current waveform:", content)[-1].split("DONE")[0].split("\n")
+        # waveform = [string.split() for string in waveform_match]
+        # waveform = pd.DataFrame(waveform).dropna().iloc[:, 3].astype(float)
 
         ch_times_match = re.split(r"Gate times in order of output:", content)[-1].split("DONE")[0].split("\n")
         ch_times_text = pd.Series(np.concatenate([string.split() for string in ch_times_match]))
         ch_times_text = [re.search(r"\[(.*)\,(.*)\]", time).groups() for time in ch_times_text]
         ch_times = pd.DataFrame.from_records(ch_times_text, columns=["Start", "End"]).astype(float)
-        num_channels = len(waveform)  # Number of off-time channels
+        # num_channels = len(waveform)  # Number of off-time channels
 
-        self.on_time = float(re.search("OnTime: (.*) PulseTime", content).group(1).strip())
-        self.pulse_time = float(re.search("PulseTime: (.*) ExponentialRiseConstant", content).group(1).strip())
-        self.survey_type = re.search("Sensor = (.*)", content).group(1).strip()
+        # on_time = float(re.search("OnTime: (.*) PulseTime", content).group(1).strip())
+        # pulse_time = float(re.search("PulseTime: (.*) ExponentialRiseConstant", content).group(1).strip())
+        # survey_type = re.search("Sensor = (.*)", content).group(1).strip()
 
         # Data
         columns = np.insert(ch_times.index.astype(str), 0, ["Station", "Component"])
         model_matches = re.split(r"\$\$ MODEL", content)[1:]
+        count = 1
+        num_files = len(model_matches)
         for model_text in model_matches:
             model_text = model_text.strip()
             info = model_text.split("\n")[0]
@@ -184,7 +189,7 @@ class PeterFile:
             for data_text in data_matches:
                 component = re.search(r"Outputting Rx component: \d =(\w)", data_text)
                 if not component:
-                    raise ValueError(f"No component found in {self.filepath.name}.")
+                    raise ValueError(f"No component found in {filepath.name}.")
                 component = component.group(1).upper()
                 readings = [arr.split() for arr in data_text.split("\n")[1:]]
                 data_df = pd.DataFrame.from_records(readings).dropna().astype(float)
@@ -192,29 +197,64 @@ class PeterFile:
                 data_df.columns = columns
                 model_data = model_data.append(data_df)
 
-            # data = {"Name": name.upper(), "X_Dim": x_dim, "Y_Dim": y_dim, "Conductance": conductance, "Data": model_data}
-            # self.data.append(data)
-            head = f"Name: {name.upper()} X_Dim: {x_dim} Y_Dim: {y_dim} Conductance: {conductance}\n"
-            ch_times = ch_times.to_numpy()
-            file_name = self.filepath.parent.joinpath(f"{x_dim}x{y_dim}{name.upper()}").with_suffix(".pete")
-            print(f"Saving {file_name}.")
+            head = f"Name:{name.upper()} X_Dim:{x_dim} Y_Dim:{y_dim} Conductance:{conductance}"
+            ch_times_text = ch_times
+            file_name = filepath.parent.joinpath(f"{x_dim}x{y_dim}{name.upper()}").with_suffix(".dat")
+            file_text = F"{head}\n\n" \
+                        F"### Channel Times ###\n" \
+                        F"{ch_times_text}\n\n" \
+                        F"### Data ###\n" \
+                        F"{model_data.to_string(header=True, index=False)}"
+            print(f"Saving {file_name} ({count}/{num_files}).")
 
-            with open(file_name, 'a') as f:
-                f.write(head)
-                f.write(model_data.to_string(header=True, index=False))
-            # model_data.to_csv(file_name, index=False)
+            with open(file_name, 'w') as f:
+                f.write(file_text)
+            count += 1
 
-        # self.components = np.unique(np.concatenate(
-        #     [data.Component.unique() for data in [lst["Data"] for lst in self.data]]
-        # ))
-        # return self
+    def parse(self, filepath):
+        """
+        Parse a custom text file (which was converted from Peter's format previously).
+        :param filepath: Path or str
+        """
+        self.filepath = Path(filepath)
+
+        if not self.filepath.is_file():
+            raise ValueError(f"{self.filepath} is not a file.")
+
+        print(f"Parsing {self.filepath.name}")
+        with open(filepath, 'r') as file:
+            content = file.read()
+
+        head = content.split("\n")[0].strip().split()
+        if head[0] == "":
+            raise ValueError(F"{self.filepath.name} is not the correct file format.")
+
+        self.name = re.sub(r"Name:", "", head[0])
+        self.x_dim = re.sub(r"X_Dim:", "", head[1])
+        self.y_dim = re.sub(r"Y_Dim:", "", head[2])
+        self.conductance = re.sub(r"Conductance:", "", head[3])
+
+        ch_times_text = content.split("### Channel Times ###")[1].split("### Data ###")[0].strip()
+        ch_times_io = StringIO(ch_times_text)
+        self.ch_times = pd.read_csv(ch_times_io, delim_whitespace=True)
+
+        # Data
+        data_text = content.split("### Data ###")[1].strip()
+        data_io = StringIO(data_text)
+        self.data = pd.read_csv(data_io, delim_whitespace=True)
+        str_cols = [str(i) for i in range(len(self.ch_times))]
+        int_cols = list(range(len(self.ch_times)))
+        self.data.rename(columns=dict(zip(str_cols, int_cols)), inplace=True)
+        self.components = self.data.Component.unique()
+
+        return self
 
     def get_range(self):
         channels = self.ch_times.index
-        all_data = [lst["Data"] for lst in self.data]
         data = self.data.loc[:, channels]
         mn = data.min().min()
         mx = data.max().max()
+        print(f"Data range of {self.filepath.name} is {mn} to {mx}.")
         return mn, mx
 
 
@@ -222,6 +262,8 @@ if __name__ == '__main__':
     peter_file_parser = PeterFile()
 
     sample_files = Path(__file__).parents[2].joinpath('sample_files')
-    file = sample_files.joinpath(r'Aspect ratio\Peter\2021-03-11_MUN_150m_ModelGroup.txt')
-    peter_file = peter_file_parser.convert(file)
-    # peter_file.get_range()
+    # file = sample_files.joinpath(r'Aspect ratio\Peter\2021-03-11_MUN_150m_ModelGroup.txt')
+    # peter_file = peter_file_parser.convert(file)
+    file = sample_files.joinpath(r'Aspect ratio\Peter\50x150A.dat')
+    peter_file = peter_file_parser.parse(file)
+    peter_file.get_range()
