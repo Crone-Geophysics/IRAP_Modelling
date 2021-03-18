@@ -889,7 +889,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         df_stems = df.applymap(get_stem)
         unique_stems = np.unique(np.concatenate(df.applymap(get_stem).to_numpy()))
         common_files = []
-        # for i in range(0, len(np.max(self.opened_files))):
+
 
     def get_plotting_info(self, file_type):
         """Return the plotting information for a file type"""
@@ -2216,13 +2216,130 @@ if __name__ == '__main__':
         print(f"Process complete.")
         os.startfile(output)
 
+    def compare_step_on_b_with_theory():
+        theory_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\Infinite sheet 100S.xlsx")
+        theory_df = pd.read_excel(theory_file, header=2)
+        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison.PDF")
+
+        figure, z_ax = plt.subplots()
+        figure.set_size_inches((8.5, 11))
+        # plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=0.2)
+
+        def plot(filepath, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.,
+                 incl_footnote=False):
+
+            # z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+
+            parser = TEMFile()
+            file = parser.parse(filepath)
+
+            print(f"Plotting {filepath.name}.")
+
+            z_data = file.data[file.data.COMPONENT == "Z"]
+
+            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+            min_ch = ch_start - 1
+            max_ch = min(ch_end - 1, len(channels) - 1)
+            plotting_channels = channels[min_ch: max_ch + 1]
+            global footnote
+
+            for ind, ch in enumerate(plotting_channels):
+                if ind == 0:
+                    label = f"{name}"
+
+                    if incl_footnote:
+                        if min_ch == max_ch:
+                            footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
+                        else:
+                            footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
+                                        f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
+                else:
+                    label = None
+
+                x = z_data.STATION.astype(float) + station_shift
+                zz = z_data.loc[:, ch].astype(float) * data_scaling * -1
+                z_ax.plot(x, zz,
+                          color=color,
+                          linestyle="-",
+                          # alpha=alpha,
+                          alpha=1 - (ind / (len(plotting_channels))),
+                          label=label,
+                          zorder=1)
+
+        def plot_theory():
+            theory_x = theory_df.Position
+            # z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+
+            global footnote
+            footnote += f"Theory plotting {(theory_df.columns[1] * 1e3):.3f}ms to {(theory_df.columns[-1] * 1e3):.3f}ms"
+
+            for ind, (time, ch_response) in enumerate(theory_df.iloc[:, 1:].iteritems()):
+                if ind == 0:
+                    label = f"Theory"
+                else:
+                    label = None
+
+                theory_y = ch_response.values
+
+                z_ax.plot(theory_x, theory_y,
+                          color="r",
+                          linestyle="-",
+                          alpha=1 - (ind / (len(theory_df.columns) - 1)),
+                          label=label,
+                          zorder=1)
+
+        maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\Step Turn On - B")
+        files = os_sorted(list(maxwell_folder.glob("2000x2000 - 100.tem")))
+
+        count = 0
+        with PdfPages(output) as pdf:
+            for filepath in files:
+                print(f"Plotting set {count + 1}/{len(files)}")
+                global footnote
+                footnote = ''
+
+                # Plot the files
+                plot(filepath, "b", 1, 100, name=f"{filepath.name}", station_shift=0, data_scaling=1., alpha=1.,
+                     incl_footnote=True)
+                plot_theory()
+
+                # Set the labels
+                z_ax.set_xlabel(f"Station")
+                z_ax.set_ylabel(f"EM Response\n(nT/s)")
+                plt.suptitle(f"Infinite Thin Sheet B-field Current Step-on")
+                z_ax.set_title(f"{filepath.stem} (Z Component)")
+
+                # Create the legend
+                handles, labels = z_ax.get_legend_handles_labels()
+
+                # sort both labels and handles by labels
+                # labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
+                z_ax.legend(handles, labels)
+
+                # Add the footnote
+                z_ax.text(0.995, 0.01, footnote,
+                          ha='right',
+                          va='bottom',
+                          size=6,
+                          transform=figure.transFigure)
+
+                # plt.show()
+                pdf.savefig(figure, orientation='portrait')
+                z_ax.clear()
+
+                count += 1
+
+        print(f"Process complete.")
+        os.startfile(output)
+
     # TODO Change "MUN" to "EM3D"
-    plot_aspect_ratio()
+    # plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
     # compare_maxwell_ribbons()
+    compare_step_on_b_with_theory()
 
     # tester.open_peter_converter()
     # tester.add_row(sample_files.joinpath(r"Aspect ratio\Maxwell"))

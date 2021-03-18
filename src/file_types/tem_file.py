@@ -254,11 +254,12 @@ class TEMFile:
             content = file.read()
             split_content = re.sub(' &', '', content).split('\n')
 
-        # The top two lines of headers
-        header = split_content[1].split()
-        header.extend(split_content[2].split())
+        header = content.split(r"/TIMES(ms)")[0].split("\n")[1:]
+        header = np.concatenate([h.split() for h in header])
         header_dict = {}
         for match in header:
+            if match.strip() == "&":
+                continue
             value = match.split(':')
             header_dict[value[0]] = value[1]
 
