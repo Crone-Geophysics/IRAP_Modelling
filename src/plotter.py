@@ -2189,11 +2189,7 @@ if __name__ == '__main__':
         os.startfile(output)
 
     def compare_step_on_b_with_theory():
-        theory_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\Infinite sheet 100S.xlsx")
-        theory_df = pd.read_excel(theory_file, header=2)
-        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison.PDF")
-
-        figure, z_ax = plt.subplots()
+        figure, (x_ax, z_ax) = plt.subplots(nrows=2, sharex='all')
         figure.set_size_inches((8.5, 11))
 
         def plot_maxwell(filepath, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.):
@@ -2203,17 +2199,18 @@ if __name__ == '__main__':
 
             print(f"Plotting {filepath.name}.")
 
+            x_data = file.data[file.data.COMPONENT == "X"]
             z_data = file.data[file.data.COMPONENT == "Z"]
 
             channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
             min_ch = ch_start - 1
             max_ch = min(ch_end - 1, len(channels) - 1)
             plotting_channels = channels[min_ch: max_ch + 1]
-            global footnote
 
             for ind, ch in enumerate(plotting_channels):
                 if ind == 0:
                     label = f"{name}"
+                    global footnote
 
                     if min_ch == max_ch:
                         footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
@@ -2224,7 +2221,16 @@ if __name__ == '__main__':
                     label = None
 
                 x = z_data.STATION.astype(float) + station_shift
-                zz = z_data.loc[:, ch].astype(float) * data_scaling * -1
+                zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
+                xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
+
+                x_ax.plot(x, xx,
+                          color=color,
+                          linestyle="-",
+                          # alpha=alpha,
+                          alpha=1 - (ind / (len(plotting_channels))) * 0.9,
+                          label=label,
+                          zorder=1)
                 z_ax.plot(x, zz,
                           color=color,
                           linestyle="-",
@@ -2233,80 +2239,249 @@ if __name__ == '__main__':
                           label=label,
                           zorder=1)
 
-        def plot_theory():
-            theory_x = theory_df.Position
+                x_ax.set_xlim([x.min(), x.max()])
+                z_ax.set_xlim([x.min(), x.max()])
 
+        def plot_theory(theory_x_file, theory_z_file):
+            x_df = pd.read_excel(theory_x_file, header=4).dropna(axis=1)
+            z_df = pd.read_excel(theory_z_file, header=4).dropna(axis=1)
+            x = x_df.Position
             global footnote
-            footnote += f"Theory plotting {(theory_df.columns[1] * 1e3):.3f}ms to {(theory_df.columns[-1] * 1e3):.3f}ms"
+            footnote += f"Theory plotting {(x_df.columns[1] * 1e3):.3f}ms to {(x_df.columns[-1] * 1e3):.3f}ms"
 
-            for ind, (_, ch_response) in enumerate(theory_df.iloc[:, 1:].iteritems()):
+            for ind, (_, ch_response) in enumerate(x_df.iloc[:, 1:].iteritems()):
                 if ind == 0:
                     label = f"Theory"
                 else:
                     label = None
 
-                theory_y = ch_response.values
+                theory_x = ch_response.values
 
-                z_ax.plot(theory_x, theory_y,
+                x_ax.plot(x, theory_x,
                           color="r",
                           linestyle="-",
-                          alpha=1 - (ind / (len(theory_df.columns) - 1)) * 0.9,
+                          alpha=1 - (ind / (len(x_df.columns) - 1)) * 0.9,
                           label=label,
                           zorder=1)
 
-        maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
-        files = os_sorted(list(maxwell_folder.glob("2000x2000 - 100.tem")))
+            for ind, (_, ch_response) in enumerate(z_df.iloc[:, 1:].iteritems()):
+                if ind == 0:
+                    label = f"Theory"
+                else:
+                    label = None
 
-        count = 0
-        with PdfPages(output) as pdf:
+                theory_z = ch_response.values
+
+                z_ax.plot(x, theory_z,
+                          color="r",
+                          linestyle="-",
+                          alpha=1 - (ind / (len(x_df.columns) - 1)) * 0.9,
+                          label=label,
+                          zorder=1)
+
+        def format_figure(title, footnote, b_field=False):
+            # for text in figure.texts:
+            #     text.remove()
+            #
+            for legend in figure.legends:
+                legend.remove()
+
+            # Set the labels
+            z_ax.set_xlabel(f"Station")
+            if b_field is True:
+                x_ax.set_ylabel(f"EM Response\n(nT)")
+                z_ax.set_ylabel(f"EM Response\n(nT)")
+            else:
+                x_ax.set_ylabel(f"EM Response\n(nT/s)")
+                z_ax.set_ylabel(f"EM Response\n(nT/s)")
+            figure.suptitle(title)
+            x_ax.set_title(f"X Component")
+            z_ax.set_title(f"Z Component")
+
+            # Create the legend
+            handles, labels = z_ax.get_legend_handles_labels()
+
+            # sort both labels and handles by labels
+            figure.legend(handles, labels)
+
+            # Add the footnote
+            z_ax.text(0.995, 0.01, footnote,
+                      ha='right',
+                      va='bottom',
+                      size=6,
+                      transform=figure.transFigure)
+
+        def plot(theory_x_file, theory_z_file, maxwell_folder, conductance, b_field=False, log=False):
+            assert theory_x_file.is_file(), F"Theory file X does not exist."
+            assert theory_z_file.is_file(), F"Theory file Z does not exist."
+            assert maxwell_folder.is_dir(), F"Maxwell folder does not exist."
+            files = os_sorted(list(maxwell_folder.glob(f"*{conductance}.tem")))
+
+            count = 0
             for filepath in files:
                 print(f"Plotting set {count + 1}/{len(files)}")
+                if log:
+                    x_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+                    z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+
                 global footnote
                 footnote = ''
 
-                # z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
-
                 # Plot the files
                 plot_maxwell(filepath, "b", 1, 100, name=f"{filepath.name}", station_shift=0, data_scaling=1., alpha=1.)
-                plot_theory()
+                plot_theory(theory_x_file, theory_z_file)
+                if b_field is True:
+                    format_figure(f"Infinite Thin Sheet B-field Current Step-On - {conductance}S", footnote,
+                                  b_field=True)
+                else:
+                    format_figure(f"Infinite Thin Sheet dB/dt Current Step-On - {conductance}S", footnote,
+                                  b_field=False)
 
-                # Set the labels
-                z_ax.set_xlabel(f"Station")
-                z_ax.set_ylabel(f"EM Response\n(nT)")
-                plt.suptitle(f"Infinite Thin Sheet B-field Current Step-On")
-                # z_ax.set_title(f"{filepath.stem} (Z Component)")
-                z_ax.set_title(f"Z Component")
-
-                # Create the legend
-                handles, labels = z_ax.get_legend_handles_labels()
-
-                # sort both labels and handles by labels
-                z_ax.legend(handles, labels, loc="lower right")
-
-                # Add the footnote
-                z_ax.text(0.995, 0.01, footnote,
-                          ha='right',
-                          va='bottom',
-                          size=6,
-                          transform=figure.transFigure)
-
-                # plt.show()
                 pdf.savefig(figure, orientation='portrait')
+
+                x_ax.clear()
                 z_ax.clear()
 
                 count += 1
 
-        print(f"Process complete.")
-        os.startfile(output)
+        # """ B FIELD """
+        # """1 S"""
+        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 1S.PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=True, log=False)
+        #     os.startfile(output)
+        #
+        # """10 S"""
+        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 10S.PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=True, log=False)
+        #     os.startfile(output)
+        #
+        # """100 S"""
+        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 100S.PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=True, log=False)
+        #     os.startfile(output)
+        #
+        # """ Log Scale """
+        # """1 S"""
+        # output = sample_files.joinpath(
+        #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 1S (log).PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=True, log=True)
+        #     os.startfile(output)
+        #
+        # """10 S"""
+        # output = sample_files.joinpath(
+        #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 10S (log).PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=True, log=True)
+        #     os.startfile(output)
+        #
+        # """100 S"""
+        # output = sample_files.joinpath(
+        #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 100S (log).PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=True, log=True)
+        #     os.startfile(output)
+
+        """ dBdt """
+        """1 S"""
+        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 1S.PDF")
+        with PdfPages(output) as pdf:
+            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt X.xlsx")
+            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt Z.xlsx")
+            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+
+            plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=False, log=False)
+            os.startfile(output)
+
+        """10 S"""
+        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 10S.PDF")
+        with PdfPages(output) as pdf:
+            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt X.xlsx")
+            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt Z.xlsx")
+            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+
+            plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=False, log=False)
+            os.startfile(output)
+
+        """100 S"""
+        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 100S.PDF")
+        with PdfPages(output) as pdf:
+            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt X.xlsx")
+            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt Z.xlsx")
+            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+
+            plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=False)
+            os.startfile(output)
+
+        """ Log Scale """
+        """1 S"""
+        output = sample_files.joinpath(
+            r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 1S (log).PDF")
+        with PdfPages(output) as pdf:
+            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt X.xlsx")
+            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt Z.xlsx")
+            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+
+            plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=False, log=True)
+            os.startfile(output)
+
+        """10 S"""
+        output = sample_files.joinpath(
+            r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 10S (log).PDF")
+        with PdfPages(output) as pdf:
+            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt X.xlsx")
+            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt Z.xlsx")
+            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+
+            plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=False, log=True)
+            os.startfile(output)
+
+        """100 S"""
+        output = sample_files.joinpath(
+            r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 100S (log).PDF")
+        with PdfPages(output) as pdf:
+            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt X.xlsx")
+            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt Z.xlsx")
+            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+
+            plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=True)
+            os.startfile(output)
 
     # TODO Change "MUN" to "EM3D"
-    plot_aspect_ratio()
+    # plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
     # compare_maxwell_ribbons()
-    # compare_step_on_b_with_theory()
+    compare_step_on_b_with_theory()
 
     # tester.open_peter_converter()
     # tester.add_row(sample_files.joinpath(r"Aspect ratio\Maxwell"))
