@@ -151,8 +151,9 @@ class IRAPFile:
         Create a txt file for each model inside Peter's text file. Saves the files in the same directory.
         :param filepath: Path or str
         """
+        filepath = Path(filepath)
         if not filepath.is_file():
-            raise ValueError(f"{filepath} is not a file.")
+            raise ValueError(f"{str(filepath)} is not a file.")
 
         print(f"Converting {filepath.name}")
         with open(filepath, 'r') as file:

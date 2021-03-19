@@ -771,7 +771,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         """Add a row to the table"""
         # File type options with extensions
         options = {"Maxwell": "*.TEM", "MUN": "*.DAT", "IRAP": "*.DAT", "PLATE": "*.DAT"}
-        colors = {"Maxwell": '#0000FF', "MUN": '##00FF00', "IRAP": "#2C2C2C", "PLATE": '#FF0000'}
+        colors = {"Maxwell": '#0000FF', "MUN": '##00FF00', "IRAP": "#000000", "PLATE": '#FF0000'}
 
         # Don't include filetypes that are already selected
         existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
@@ -881,15 +881,32 @@ class TestRunner(QMainWindow, test_runnerUI):
 
         def get_stem(filepath):
             if filepath is None:
-                return None
+                return ""
             else:
                 return Path(filepath).stem.upper()
 
+        # Find which stems are common in each list
         df = pd.DataFrame(self.opened_files).T
-        df_stems = df.applymap(get_stem)
-        unique_stems = np.unique(np.concatenate(df.applymap(get_stem).to_numpy()))
-        common_files = []
+        df_stems = df.applymap(get_stem).to_numpy()
+        unique_stems = np.unique(df_stems)
+        common_stems = []
+        for stem in unique_stems:
+            if all([stem in lst for lst in df_stems.T]):
+                print(f"{stem} is in all the lists.")
+                common_stems.append(stem)
+            else:
+                print(f"{stem} is not in all the lists.")
 
+        # Only keep filepaths whose stems are in the common_stems list
+        filereted_files = []
+        for lst in self.opened_files:
+            filtered_lst = []
+            for filepath in lst:
+                if Path(filepath).stem.upper() in common_stems:
+                    filtered_lst.append(filepath)
+            filereted_files.append(filtered_lst)
+
+        return filereted_files
 
     def get_plotting_info(self, file_type):
         """Return the plotting information for a file type"""
@@ -946,11 +963,9 @@ class TestRunner(QMainWindow, test_runnerUI):
             max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
             plotting_channels = channels[min_ch: max_ch + 1]
 
-            size = 8  # For scatter point size
-
             for ind, ch in enumerate(plotting_channels):
                 if ind == 0:
-                    label = f"{file.filepath.stem} (Maxwell)"
+                    label = f"{file.filepath.name.upper()} (Maxwell)"
 
                     if min_ch == max_ch:
                         self.footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
@@ -963,25 +978,12 @@ class TestRunner(QMainWindow, test_runnerUI):
                 x = comp_data.STATION.astype(float) + properties['station_shift']
                 y = comp_data.loc[:, ch].astype(float) * properties['scaling']
 
-                if len(x) == 1:
-                    style = 'o'
-                    self.ax.scatter(x, y,
-                                    color=color,
-                                    marker=style,
-                                    s=size,
-                                    alpha=properties['alpha'],
-                                    label=label,
-                                    zorder=1)
-
-                else:
-                    # style = '--' if 'Q' in freq else '-'
-                    self.ax.plot(x, y,
-                                 color=color,
-                                 alpha=properties['alpha'],
-                                 label=label,
-                                 zorder=1)
-
-                size += 2
+                # style = '--' if 'Q' in freq else '-'
+                self.ax.plot(x, y,
+                             color=color,
+                             alpha=properties['alpha'],
+                             label=label,
+                             zorder=1)
 
         def plot_plate(filepath, component):
             parser = PlateFFile()
@@ -1008,11 +1010,9 @@ class TestRunner(QMainWindow, test_runnerUI):
                 print(f"No {component} data in {file.filepath.name}.")
                 return
 
-            size = 8  # For scatter point size
-
             for ind, ch in enumerate(plotting_channels):
                 if ind == 0:
-                    label = f"{file.filepath.stem} (PLATE)"
+                    label = f"{file.filepath.name.upper()} (PLATE)"
 
                     if min_ch == max_ch:
                         self.footnote += f"PLATE file plotting channel {min_ch + 1} " \
@@ -1026,26 +1026,12 @@ class TestRunner(QMainWindow, test_runnerUI):
                 x = comp_data.Station.astype(float) + properties['station_shift']
                 y = comp_data.loc[:, ch].astype(float) * properties['scaling']
 
-                if len(x) == 1:
-                    style = 'o'
-                    self.ax.scatter(x, y,
-                                    color=color,
-                                    marker=style,
-                                    s=size,
-                                    alpha=properties['alpha'],
-                                    label=label,
-                                    zorder=2)
-
-                else:
-                    # style = '--' if 'Q' in freq else '-'
-                    self.ax.plot(x, y,
-                                 color=color,
-                                 alpha=properties['alpha'],
-                                 # lw=count / 100,
-                                 label=label,
-                                 zorder=2)
-
-                size += 2
+                self.ax.plot(x, y,
+                             color=color,
+                             alpha=properties['alpha'],
+                             # lw=count / 100,
+                             label=label,
+                             zorder=2)
 
         def plot_mun(filepath, component):
             parser = MUNFile()
@@ -1058,8 +1044,8 @@ class TestRunner(QMainWindow, test_runnerUI):
                 self.units = file.units
             else:
                 if file.units != self.units:
-                    self.msg.warning(self, "Different Units", f"The units of {file.filepath.name} are different then"
-                    f"the existing units ({file.units} vs {self.units})")
+                    self.msg.warning(self, "Different Units", f"The units of {file.filepath.name} are different then "
+                                                              f"the existing units ({file.units} vs {self.units})")
 
             channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
             min_ch = properties['ch_start'] - 1
@@ -1072,43 +1058,28 @@ class TestRunner(QMainWindow, test_runnerUI):
                 print(f"No {component} data in {file.filepath.name}.")
                 return
 
-            size = 8  # For scatter point size
-
             for ind, ch in enumerate(plotting_channels):
                 # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
                 if ind == 0:
-                    label = f"{file.filepath.stem} (MUN)"
+                    label = f"{file.filepath.name.upper()} (MUN)"
                 else:
                     label = None
 
                 x = comp_data.STATION.astype(float) + properties['station_shift']
                 y = comp_data.loc[:, ch].astype(float) * properties['scaling']
 
-                if len(x) == 1:
-                    style = 'o'
-                    self.ax.scatter(x, y,
-                                    color=color,
-                                    marker=style,
-                                    s=size,
-                                    alpha=properties['alpha'],
-                                    label=label,
-                                    zorder=3)
-
-                else:
-                    self.ax.plot(x, y,
-                                 color=color,
-                                 alpha=properties['alpha'],
-                                 label=label,
-                                 zorder=3)
-
-                size += 2
+                self.ax.plot(x, y,
+                             color=color,
+                             alpha=properties['alpha'],
+                             label=label,
+                             zorder=3)
 
         def plot_irap(filepath, component):
             """
-             Plot a Maxwell TEM file
-             :param filepath: Path object
-             :param component: Str, either X, Y, or Z.
-             """
+            Plot an IRAP DAT file
+            :param filepath: Path object
+            :param component: Str, either X, Y, or Z.
+            """
             parser = IRAPFile()
             file = parser.parse(filepath)
 
@@ -1133,11 +1104,9 @@ class TestRunner(QMainWindow, test_runnerUI):
             max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
             plotting_channels = channels[min_ch: max_ch + 1]
 
-            size = 8  # For scatter point size
-
             for ind, ch in enumerate(plotting_channels):
                 if ind == 0:
-                    label = f"{file.filepath.stem} (IRAP)"
+                    label = f"{file.filepath.name.upper()} (IRAP)"
 
                     min_time, max_time = file.ch_times.loc[min_ch, "Start"], file.ch_times.loc[max_ch, "End"]
                     if min_ch == max_ch:
@@ -1151,25 +1120,11 @@ class TestRunner(QMainWindow, test_runnerUI):
                 x = comp_data.Station.astype(float) + properties['station_shift']
                 y = comp_data.loc[:, ch].astype(float) * properties['scaling']
 
-                if len(x) == 1:
-                    style = 'o'
-                    self.ax.scatter(x, y,
-                                    color=color,
-                                    marker=style,
-                                    s=size,
-                                    alpha=properties['alpha'],
-                                    label=label,
-                                    zorder=1)
-
-                else:
-                    # style = '--' if 'Q' in freq else '-'
-                    self.ax.plot(x, y,
-                                 color=color,
-                                 alpha=properties['alpha'],
-                                 label=label,
-                                 zorder=1)
-
-                size += 2
+                self.ax.plot(x, y,
+                             color=color,
+                             alpha=properties['alpha'],
+                             label=label,
+                             zorder=1)
 
         def get_fixed_range():
             """Find the Y range of each file"""
@@ -1221,7 +1176,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         progress.setLabelText("Printing Profile Plots")
         with PdfPages(pdf_filepath) as pdf:
             for maxwell_file, mun_file, irap_file, plate_file in list(zip_longest(*plotting_files.values(),
-                                                                                   fillvalue=None))[:]:
+                                                                                  fillvalue=None))[:]:
                 if progress.wasCanceled():
                     print(f"Process cancelled.")
                     break
@@ -1239,6 +1194,17 @@ class TestRunner(QMainWindow, test_runnerUI):
                         plot_irap(irap_file, component)
                     if plate_file:
                         plot_plate(plate_file, component)
+
+                    if self.log_y_cbox.isChecked():
+                        if self.plot_profiles_rbtn.isChecked():
+                            self.ax.set_yscale('symlog',
+                                               linthresh=10,
+                                               linscale=1. / math.log(10),
+                                               subs=list(np.arange(2, 10, 1)))
+                        else:
+                            self.ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
+                    else:
+                        self.ax.set_yscale('linear')
 
                     # Set the labels
                     self.ax.set_xlabel(f"Station")
@@ -1321,7 +1287,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             x = file.ch_times[min_ch: max_ch + 1]
             decay = data.loc[station, plotting_channels] * properties['scaling']
 
-            label = f"{file.filepath.stem} (Maxwell)"
+            label = f"{file.filepath.name.upper()} (Maxwell)"
 
             self.footnote += f"Maxwell file plotting station {station}.  "
 
@@ -1329,7 +1295,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             self.ax.plot(x, decay,
                          color=color,
                          alpha=properties['alpha'],
-                         label="Linear-scale",
+                         label=label,
                          zorder=1)
 
             # self.ax2.plot(x, decay,
@@ -1349,6 +1315,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
         # self.ax2.get_yaxis().set_visible(True)
         self.ax.tick_params(axis='y', labelcolor='blue')
+        self.ax.set_yscale('linear')
         progress = QProgressDialog("Processing...", "Cancel", 0, int(num_files_found))
         progress.setWindowModality(QtCore.Qt.WindowModal)
         progress.setWindowTitle("Printing Decays")
@@ -1585,6 +1552,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         def plot_irap(filepath, component):
             raise NotImplementedError("IRAP run-on not implemented yet.")
 
+        self.ax.set_yscale('linear')
         with PdfPages(pdf_filepath) as pdf:
             if plotting_files['Maxwell']:
                 plot_maxwell_decays(plotting_files['Maxwell'], pdf)
@@ -1738,6 +1706,7 @@ class TestRunner(QMainWindow, test_runnerUI):
                 count += 1
                 progress.setValue(count)
 
+        self.ax.set_yscale('linear')
         with PdfPages(pdf_filepath) as pdf:
             if plotting_files['Maxwell']:
                 plot_maxwell_convergence(plotting_files['Maxwell'], pdf)
@@ -1871,17 +1840,17 @@ class TestRunner(QMainWindow, test_runnerUI):
             num_files.append(self.table.item(row, self.header_labels.index("Files Found")).text())
 
         if not all([int(num) == num_files[0] for num in num_files]):
-                # response = self.msg.question(self, "Unequal Files", "A different number of files was found for each"
-                #                                                     "filetype. Do you wish to only plot common files?",
-                #                              self.msg.Yes, self.msg.No)
-                # if response == self.msg.Yes:
+            # response = self.msg.question(self, "Unequal Files", "A different number of files was found for each "
+            #                                                     "filetype. Do you wish to only plot common files?",
+            #                              self.msg.Yes, self.msg.No)
+            # if response == self.msg.Yes:
             opened_files = self.match_files()
             # else:
             #     return
         else:
             opened_files = self.opened_files.copy()
 
-        num_files_found = np.max(opened_files)
+        num_files_found = len(opened_files[0])
         t0 = time.time()
 
         # Create a dictionary of files to plot
@@ -1895,17 +1864,6 @@ class TestRunner(QMainWindow, test_runnerUI):
 
         if not any(plotting_files.values()):
             raise ValueError("No plotting files found.")
-
-        if self.log_y_cbox.isChecked():
-            if self.plot_profiles_rbtn.isChecked():
-                self.ax.set_yscale('symlog',
-                                   linthresh=10,
-                                   linscale=1. / math.log(10),
-                                   subs=list(np.arange(2, 10, 1)))
-            else:
-                self.ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
-        else:
-            self.ax.set_yscale('linear')
 
         if self.plot_profiles_rbtn.isChecked():
             self.print_profiles(num_files_found, plotting_files, pdf_filepath)
@@ -1932,13 +1890,14 @@ if __name__ == '__main__':
     # tem_file = sample_files.joinpath(r'Aspect ratio\Maxwell\5x150A.TEM')
 
     def plot_aspect_ratio():
+        t = time.time()
         tester = TestRunner()
         tester.show()
 
         tester.plot_profiles_rbtn.setChecked(True)
         tester.test_name_edit.setText(r"Aspect Ratio")
         tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Aspect Ratio\Aspect Ratio Test (150m plate).PDF")))
+            r"Aspect Ratio\Aspect Ratio - 150m plate.PDF")))
         # tester.fixed_range_cbox.setChecked(True)
         tester.include_edit.setText("150")
         tester.include_edit.editingFinished.emit()
@@ -1961,15 +1920,28 @@ if __name__ == '__main__':
         tester.add_row(str(irap_dir), "IRAP")
         tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
         tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-
         tester.print_pdf()
-        #
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Aspect Ratio\Aspect Ratio Test (600m plate).PDF")))
-        # tester.include_edit.setText("600")
-        # tester.include_edit.editingFinished.emit()
-        #
-        # tester.print_pdf()
+
+        tester.custom_stations_cbox.setChecked(True)
+        tester.station_start_sbox.setValue(0)
+        tester.station_end_sbox.setValue(200)
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF")))
+        tester.print_pdf()
+
+        tester.custom_stations_cbox.setChecked(False)
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Aspect Ratio\Aspect Ratio - 600m plate.PDF")))
+        tester.include_edit.setText("600")
+        tester.include_edit.editingFinished.emit()
+        tester.print_pdf()
+
+        tester.custom_stations_cbox.setChecked(True)
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF")))
+        tester.print_pdf()
+
+        print(f"Total time: {(time.time() - t) / 60:.0f}:{(time.time() - t) % 60:.0f}")
 
     def plot_two_way_induction():
         tester = TestRunner()
@@ -2223,12 +2195,8 @@ if __name__ == '__main__':
 
         figure, z_ax = plt.subplots()
         figure.set_size_inches((8.5, 11))
-        # plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=0.2)
 
-        def plot(filepath, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.,
-                 incl_footnote=False):
-
-            # z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+        def plot_maxwell(filepath, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.):
 
             parser = TEMFile()
             file = parser.parse(filepath)
@@ -2247,12 +2215,11 @@ if __name__ == '__main__':
                 if ind == 0:
                     label = f"{name}"
 
-                    if incl_footnote:
-                        if min_ch == max_ch:
-                            footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
-                        else:
-                            footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
-                                        f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
+                    if min_ch == max_ch:
+                        footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
+                    else:
+                        footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
+                                    f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
                 else:
                     label = None
 
@@ -2262,18 +2229,17 @@ if __name__ == '__main__':
                           color=color,
                           linestyle="-",
                           # alpha=alpha,
-                          alpha=1 - (ind / (len(plotting_channels))),
+                          alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                           label=label,
                           zorder=1)
 
         def plot_theory():
             theory_x = theory_df.Position
-            # z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
 
             global footnote
             footnote += f"Theory plotting {(theory_df.columns[1] * 1e3):.3f}ms to {(theory_df.columns[-1] * 1e3):.3f}ms"
 
-            for ind, (time, ch_response) in enumerate(theory_df.iloc[:, 1:].iteritems()):
+            for ind, (_, ch_response) in enumerate(theory_df.iloc[:, 1:].iteritems()):
                 if ind == 0:
                     label = f"Theory"
                 else:
@@ -2284,11 +2250,11 @@ if __name__ == '__main__':
                 z_ax.plot(theory_x, theory_y,
                           color="r",
                           linestyle="-",
-                          alpha=1 - (ind / (len(theory_df.columns) - 1)),
+                          alpha=1 - (ind / (len(theory_df.columns) - 1)) * 0.9,
                           label=label,
                           zorder=1)
 
-        maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\Step Turn On - B")
+        maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
         files = os_sorted(list(maxwell_folder.glob("2000x2000 - 100.tem")))
 
         count = 0
@@ -2298,23 +2264,24 @@ if __name__ == '__main__':
                 global footnote
                 footnote = ''
 
+                # z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+
                 # Plot the files
-                plot(filepath, "b", 1, 100, name=f"{filepath.name}", station_shift=0, data_scaling=1., alpha=1.,
-                     incl_footnote=True)
+                plot_maxwell(filepath, "b", 1, 100, name=f"{filepath.name}", station_shift=0, data_scaling=1., alpha=1.)
                 plot_theory()
 
                 # Set the labels
                 z_ax.set_xlabel(f"Station")
-                z_ax.set_ylabel(f"EM Response\n(nT/s)")
-                plt.suptitle(f"Infinite Thin Sheet B-field Current Step-on")
-                z_ax.set_title(f"{filepath.stem} (Z Component)")
+                z_ax.set_ylabel(f"EM Response\n(nT)")
+                plt.suptitle(f"Infinite Thin Sheet B-field Current Step-On")
+                # z_ax.set_title(f"{filepath.stem} (Z Component)")
+                z_ax.set_title(f"Z Component")
 
                 # Create the legend
                 handles, labels = z_ax.get_legend_handles_labels()
 
                 # sort both labels and handles by labels
-                # labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
-                z_ax.legend(handles, labels)
+                z_ax.legend(handles, labels, loc="lower right")
 
                 # Add the footnote
                 z_ax.text(0.995, 0.01, footnote,
@@ -2333,15 +2300,17 @@ if __name__ == '__main__':
         os.startfile(output)
 
     # TODO Change "MUN" to "EM3D"
-    # plot_aspect_ratio()
+    plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
     # compare_maxwell_ribbons()
-    compare_step_on_b_with_theory()
+    # compare_step_on_b_with_theory()
 
     # tester.open_peter_converter()
     # tester.add_row(sample_files.joinpath(r"Aspect ratio\Maxwell"))
     # tester.close()
+    # tester = TestRunner()
+    # tester.show()
     app.exec_()

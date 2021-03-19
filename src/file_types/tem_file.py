@@ -254,7 +254,10 @@ class TEMFile:
             content = file.read()
             split_content = re.sub(' &', '', content).split('\n')
 
-        header = content.split(r"/TIMES(ms)")[0].split("\n")[1:]
+        if re.search(r"LOOP:", content):
+            header = content.split(r"LOOP:")[0].split("\n")[1:]
+        else:
+            header = content.split(r"/TIMES(ms)")[0].split("\n")[1:]
         header = np.concatenate([h.split() for h in header])
         header_dict = {}
         for match in header:
