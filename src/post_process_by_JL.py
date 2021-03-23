@@ -209,13 +209,13 @@ def read_em3d_raw(filename, n_rec, n_step, ch, t_filename, interp=False,
     specified in ch
 
     Variables:
-    n_rec: the number of recordings for each time step, can be the number
+    n_rec: Num Stations, the number of recordings for each time step, can be the number
            of observation points for configurations like fixed-loop survey
            which has one transmitter corresponding to multiple receivers,
            or can be the number of transmitters for configurations like
            the Slingram-style survey which has multiple transmitters with
            each transmitter corresponding to possibly multiple receivers.
-    n_step: the number of iteration steps used in the time-stepping.
+    n_step: Num Channels, the number of iteration steps used in the time-stepping.
     ch: the time instants (in seconds) at which the responses should be extracted.
     t_filename: the filename of the time-stepping schemes used for the
                 modeling. We need to extract time information of the iteration
@@ -914,7 +914,6 @@ def write_time_decay_files(channels, stns, fieldx, fieldy, fieldz, path=None, ti
     fy.write(("%s %d\n") % ("Number of stations: ", nstn))
     fy.write(("%s" +"%10.2f"*nstn +"\n") % ("Stations (metre): ", *stns))
 
-
     fz.write("Data type: dB/dt; UNIT: nT/s\n")
     fz.write(("%s %d\n") % ("Number of stations: ", nstn))
     fz.write(("%s" +"%10.2f"*nstn +"\n") % ("Stations (metre): ", *stns))
@@ -941,10 +940,4 @@ def write_time_decay_files(channels, stns, fieldx, fieldy, fieldz, path=None, ti
     fx.close()
     fy.close()
     fz.close()
-
-
-if __name__ == "__main__":
-    sample
-    file = "C:\Users\Eric\PycharmProjects\IRAP_Modelling\sample_files\Two-way induction\300x100\100S\EM3D\Tx_0m\results_50msec_100S_set1"
-    read_em3d_raw(file, 10, 100, )
 

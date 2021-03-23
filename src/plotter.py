@@ -1161,15 +1161,48 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             return min(mins), max(maxs)
 
-        # self.ax2.get_yaxis().set_visible(False)
-        # self.ax.tick_params(axis='y', labelcolor='k')
+        def format_figure(component):
+            if self.log_y_cbox.isChecked():
+                if self.plot_profiles_rbtn.isChecked():
+                    self.ax.set_yscale('symlog',
+                                       linthresh=10,
+                                       linscale=1. / math.log(10),
+                                       subs=list(np.arange(2, 10, 1)))
+                else:
+                    self.ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
+            else:
+                self.ax.set_yscale('linear')
+
+            # Set the labels
+            self.ax.set_xlabel(f"Station")
+            self.ax.set_ylabel(f"{component} Component Response\n({self.units})")
+            self.ax.set_title(self.test_name_edit.text())
+
+            if self.custom_stations_cbox.isChecked():
+                self.ax.set_xlim([self.station_start_sbox.value(), self.station_end_sbox.value()])
+            if self.fixed_range_cbox.isChecked():
+                y_range = np.array(get_fixed_range())
+                self.ax.set_ylim([y_range[0], y_range[1]])
+
+            # Create the legend
+            handles, labels = self.ax.get_legend_handles_labels()
+
+            if handles:
+                # sort both labels and handles by labels
+                labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
+                self.ax.legend(handles, labels).set_draggable(True)
+
+            # Add the footnote
+            self.ax.text(0.995, 0.01, self.footnote,
+                         ha='right',
+                         va='bottom',
+                         size=6,
+                         transform=self.figure.transFigure)
+
         progress = QProgressDialog("Processing...", "Cancel", 0, int(num_files_found))
         progress.setWindowModality(QtCore.Qt.WindowModal)
         progress.setWindowTitle("Printing Profiles")
         progress.show()
-
-        if self.fixed_range_cbox.isChecked():
-            y_range = np.array(get_fixed_range())
 
         count = 0
         progress.setValue(count)
@@ -1195,42 +1228,7 @@ class TestRunner(QMainWindow, test_runnerUI):
                     if plate_file:
                         plot_plate(plate_file, component)
 
-                    if self.log_y_cbox.isChecked():
-                        if self.plot_profiles_rbtn.isChecked():
-                            self.ax.set_yscale('symlog',
-                                               linthresh=10,
-                                               linscale=1. / math.log(10),
-                                               subs=list(np.arange(2, 10, 1)))
-                        else:
-                            self.ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)))
-                    else:
-                        self.ax.set_yscale('linear')
-
-                    # Set the labels
-                    self.ax.set_xlabel(f"Station")
-                    self.ax.set_ylabel(f"{component} Component Response\n({self.units})")
-                    self.ax.set_title(self.test_name_edit.text())
-
-                    if self.custom_stations_cbox.isChecked():
-                        self.ax.set_xlim([self.station_start_sbox.value(), self.station_end_sbox.value()])
-                    if self.fixed_range_cbox.isChecked():
-                        self.ax.set_ylim([y_range[0], y_range[1]])
-
-                    # Create the legend
-                    handles, labels = self.ax.get_legend_handles_labels()
-
-                    if handles:
-                        # sort both labels and handles by labels
-                        labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
-                        self.ax.legend(handles, labels).set_draggable(True)
-
-                    # Add the footnote
-                    self.ax.text(0.995, 0.01, self.footnote,
-                                 ha='right',
-                                 va='bottom',
-                                 size=6,
-                                 transform=self.figure.transFigure)
-
+                    format_figure(component)
                     # plt.show()
                     pdf.savefig(self.figure, orientation='landscape')
                     self.ax.clear()
@@ -1313,6 +1311,33 @@ class TestRunner(QMainWindow, test_runnerUI):
         def plot_irap(filepath, component):
             raise NotImplementedError("IRAP decay plots not implemented yet.")
 
+        def format_figure(component):
+            # Set the labels
+            self.ax.set_xlabel(f"Time (ms)")
+            self.ax.set_ylabel(f"{component} Component Response\n({self.units})")
+            # self.ax.set_title(f"{self.test_name_edit.text()} - {maxwell_file.stem}")
+
+            if self.custom_stations_cbox.isChecked():
+                self.ax.set_xlim([self.station_start_sbox.value(), self.station_end_sbox.value()])
+
+            # Create the legend
+            handles, labels = self.ax.get_legend_handles_labels()
+            # handles2, labels2 = self.ax2.get_legend_handles_labels()
+            # handles.extend(handles2)
+            # labels.extend(labels2)
+
+            if handles:
+                # sort both labels and handles by labels
+                labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
+                self.ax.legend(handles, labels).set_draggable(True)
+
+            # Add the footnote
+            self.ax.text(0.995, 0.01, self.footnote,
+                         ha='right',
+                         va='bottom',
+                         size=6,
+                         transform=self.figure.transFigure)
+
         # self.ax2.get_yaxis().set_visible(True)
         self.ax.tick_params(axis='y', labelcolor='blue')
         self.ax.set_yscale('linear')
@@ -1374,32 +1399,7 @@ class TestRunner(QMainWindow, test_runnerUI):
                     if plate_file:
                         plot_plate(plate_file, component)
 
-                    # Set the labels
-                    self.ax.set_xlabel(f"Time (ms)")
-                    self.ax.set_ylabel(f"{component} Component Response\n({self.units})")
-                    self.ax.set_title(f"{self.test_name_edit.text()} - {maxwell_file.stem}")
-
-                    if self.custom_stations_cbox.isChecked():
-                        self.ax.set_xlim([self.station_start_sbox.value(), self.station_end_sbox.value()])
-
-                    # Create the legend
-                    handles, labels = self.ax.get_legend_handles_labels()
-                    # handles2, labels2 = self.ax2.get_legend_handles_labels()
-                    # handles.extend(handles2)
-                    # labels.extend(labels2)
-
-                    if handles:
-                        # sort both labels and handles by labels
-                        labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
-                        self.ax.legend(handles, labels).set_draggable(True)
-
-                    # Add the footnote
-                    self.ax.text(0.995, 0.01, self.footnote,
-                                 ha='right',
-                                 va='bottom',
-                                 size=6,
-                                 transform=self.figure.transFigure)
-
+                    format_figure(component)
                     # plt.show()
                     pdf.savefig(self.figure, orientation='landscape')
                     self.ax.clear()
@@ -1896,8 +1896,6 @@ if __name__ == '__main__':
 
         tester.plot_profiles_rbtn.setChecked(True)
         tester.test_name_edit.setText(r"Aspect Ratio")
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Aspect Ratio\Aspect Ratio - 150m plate.PDF")))
         # tester.fixed_range_cbox.setChecked(True)
         tester.include_edit.setText("150")
         tester.include_edit.editingFinished.emit()
@@ -1920,26 +1918,29 @@ if __name__ == '__main__':
         tester.add_row(str(irap_dir), "IRAP")
         tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
         tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+
+        tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            r"Aspect Ratio\Aspect Ratio - 150m plate.PDF")))
         tester.print_pdf()
 
-        tester.custom_stations_cbox.setChecked(True)
-        tester.station_start_sbox.setValue(0)
-        tester.station_end_sbox.setValue(200)
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF")))
-        tester.print_pdf()
-
-        tester.custom_stations_cbox.setChecked(False)
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Aspect Ratio\Aspect Ratio - 600m plate.PDF")))
-        tester.include_edit.setText("600")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
-
-        tester.custom_stations_cbox.setChecked(True)
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF")))
-        tester.print_pdf()
+        # tester.custom_stations_cbox.setChecked(True)
+        # tester.station_start_sbox.setValue(0)
+        # tester.station_end_sbox.setValue(200)
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF")))
+        # tester.print_pdf()
+        #
+        # tester.custom_stations_cbox.setChecked(False)
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Aspect Ratio\Aspect Ratio - 600m plate.PDF")))
+        # tester.include_edit.setText("600")
+        # tester.include_edit.editingFinished.emit()
+        # tester.print_pdf()
+        #
+        # tester.custom_stations_cbox.setChecked(True)
+        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        #     r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF")))
+        # tester.print_pdf()
 
         print(f"Total time: {(time.time() - t) / 60:.0f}:{(time.time() - t) % 60:.0f}")
 
@@ -2475,13 +2476,13 @@ if __name__ == '__main__':
             os.startfile(output)
 
     # TODO Change "MUN" to "EM3D"
-    # plot_aspect_ratio()
+    plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
     # compare_maxwell_ribbons()
-    compare_step_on_b_with_theory()
+    # compare_step_on_b_with_theory()
 
     # tester.open_peter_converter()
     # tester.add_row(sample_files.joinpath(r"Aspect ratio\Maxwell"))
