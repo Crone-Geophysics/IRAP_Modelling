@@ -158,7 +158,7 @@ def get_t_modeling(filename):
     istart: the index of the time series where t>0 begins
     """
 
-    data = np.loadtxt(filename, comments='#', dtype=np.float)
+    data = np.loadtxt(filename, comments='#', dtype=float)
 
     # choose the column of time series with t=0 as the beginning of the off
     #  time, instead of the beginning of the modelling process.
@@ -189,7 +189,7 @@ def read_observation_line(filename, whichColumn=2):
     """
     
     # load text file containing the info
-    data = np.loadtxt(filename, dtype=np.float)
+    data = np.loadtxt(filename, dtype=float)
     nx,ny = data.shape
     if whichColumn < 1:
        raise Exception("Selected column outside data indexes! too small")
@@ -249,12 +249,12 @@ def read_em3d_raw(filename, n_rec, n_step, ch, t_filename, interp=False,
     """
 
     # Initialize proper arrays for the field values
-    field = np.zeros((n_step, n_rec, n_comp), dtype=np.float)
+    field = np.zeros((n_step, n_rec, n_comp), dtype=float)
 
     # Read in the original responses
-    data = np.loadtxt(filename, dtype=np.float)
-    print("amount of dBdt data values: ", np.size(data))
-    print("shape of dBdt data array:", np.shape(data))
+    data = np.loadtxt(filename, dtype=float)
+    # print("amount of dBdt data values: ", np.size(data))
+    # print("shape of dBdt data array:", np.shape(data))
     # The number of channels based on ch
     nch = ch.size
 
@@ -278,7 +278,7 @@ def read_em3d_raw(filename, n_rec, n_step, ch, t_filename, interp=False,
         time_modeling = time_modeling[idx_offtime:]
 
     # Get the responses at certain time gates
-    field_out = np.zeros((nch, n_rec, n_comp), dtype=np.float)
+    field_out = np.zeros((nch, n_rec, n_comp), dtype=float)
     for i in range(len(ch)):
         if ch[i] < np.nanmin(time_modeling) or ch[i] > np.nanmax(time_modeling):
             print("time channel requested: ", ch[i] * 1.e+3, " ms")
@@ -649,7 +649,7 @@ def plot_decay_curve(time1, data1, labels, fig_name, ylabel, time2=None, data2=N
     else:
         # plot a horizontal zero line
         #print("I've got here ?")
-        timex = np.linspace(xmin_ax, xmax_ax, 1000, dtype=np.float)
+        timex = np.linspace(xmin_ax, xmax_ax, 1000, dtype=float)
         datax = np.zeros((timex.size, 1))
         ax.plot(timex, datax, linewidth=0.6, linestyle="--", color="gray")
     # Set up the figure
@@ -689,7 +689,7 @@ def plot_decay_curve(time1, data1, labels, fig_name, ylabel, time2=None, data2=N
             num_points = 1000
         else:
             num_points = 3000
-        wtime = np.linspace(wtime_1, wtime_2, num_points, dtype=np.float)
+        wtime = np.linspace(wtime_1, wtime_2, num_points, dtype=float)
         wave_data = get_waveform_vs_time(ctype=3, time=wtime, basetime=50,
                                          rampLen=1.5, nhalfperiod=num_halfperiod, tao=1.0, amp=30.0)
         axw.plot(wtime, wave_data, linewidth=0.5, label="waveform",
