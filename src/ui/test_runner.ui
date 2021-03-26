@@ -354,6 +354,7 @@
      <string>File</string>
     </property>
     <addaction name="actionConvert_IRAP_File"/>
+    <addaction name="actionConvert_MUN_File"/>
    </widget>
    <addaction name="menuFile"/>
   </widget>
@@ -361,6 +362,11 @@
   <action name="actionConvert_IRAP_File">
    <property name="text">
     <string>Convert IRAP File</string>
+   </property>
+  </action>
+  <action name="actionConvert_MUN_File">
+   <property name="text">
+    <string>Convert MUN Folder</string>
    </property>
   </action>
  </widget>

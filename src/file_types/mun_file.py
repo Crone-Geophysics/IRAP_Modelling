@@ -133,39 +133,54 @@ class MUNFile:
         self.data = pd.DataFrame()
 
     @staticmethod
-    def convert(folder, primary_folder):
+    def convert(folder, primary_folder=None, output_folder=None):
         """
         Convert Jianbo's data folder into TEM-like files.
-        :param folder: str or Path, parent folder which contains model data.
+        :param folder: str or Path, parent folder which contains model data. Subfolders inside this folder should have
+        the data files.
         :param primary_folder: str or Path, parent folder which contains the primary field data.
+        :param output_folder: str or Path, folder to save all the files to.
         """
 
-        def get_primary_field_data(primary_folder, channels_3D, n_rec, n_iters):
-            dbdt_filepath = primary_folder.joinpath("iTr=001_dBdt.dat")
-            channel_file = primary_folder.joinpath("time_stepping_scheme.txt")
-            if not Path(dbdt_filepath).is_file():
-                raise ValueError(F"Cannot find dBdt data file for the primary field in {primary_folder}.")
-            if not Path(channel_file).is_file():
-                raise ValueError(F"Cannot find channel times file in {primary_folder}.")
+        def get_field_data(data_folder, channels, primary_field=False):
+            # read the primary 3D response
+            field_filename = data_folder.joinpath(r'iTr=001_dBdt.dat')
+            channel_file = data_folder.joinpath(r'time_stepping_scheme.txt')
+            time_iters_filename = data_folder.joinpath(r'time_iterations.dat')
+            obs_filename = data_folder.joinpath(r'iTr=001_observation_points_coordinates.xyz')
+            assert field_filename.exists(), F"Cannot find dBdt data file for the primary field in {primary_folder}."
+            assert channel_file.exists(), F"Cannot find channel times file in {primary_folder}."
+            assert time_iters_filename.exists(), F"Cannot find time stepping iterations file in {primary_folder}."
+            assert obs_filename.exists(), F"Cannot find observation sites file in {primary_folder}."
 
-            timebase = 50.e-3  # msec
-            ramp = 1.5e-3  # msec, linear ramp off
+            # Number of stations
+            stn = read_observation_line(str(obs_filename), whichColumn=2)
+            n_rec = stn.size
 
-            # when asking primary fields over more than 1 period
-            nch_total = channels_3D.size
-            nch_redueced_1t = np.zeros(nch_total)  # shifted time channels
+            # The number of actual time iterations in the 3D model
+            time_iters = np.loadtxt(str(time_iters_filename), dtype=float)
+            n_iters = time_iters.size
 
-            period = timebase * 4.0
-            for k in range(nch_total):
-                nch_redueced_1t[k] = (channels_3D[k] + timebase + ramp)  # t=-51.5 ms is the beginning of everything
-                ratio = nch_redueced_1t[k] / period
-                nch_redueced_1t[k] = nch_redueced_1t[k] - np.floor(ratio) * period
+            # Reduce the periods if it's the primary field folder
+            if primary_field is True:
+                # when asking primary fields over more than 1 period
+                timebase = 50.e-3  # msec
+                ramp = 1.5e-3  # msec, linear ramp off
+                nch_total = channels.size
+                nch_redueced_1t = np.zeros(nch_total)  # shifted time channels
 
-            nch_redueced_1t = nch_redueced_1t - (timebase + ramp)
-            primary_field = read_em3d_raw(str(dbdt_filepath), n_rec, n_iters, nch_redueced_1t, str(channel_file),
-                                          ZeroTimeShift=None,
-                                          interp=False)
-            return primary_field
+                period = timebase * 4.0
+                for k in range(nch_total):
+                    nch_redueced_1t[k] = (channels[k] + timebase + ramp)  # t=-51.5 ms is the beginning of everything
+                    ratio = nch_redueced_1t[k] / period
+                    nch_redueced_1t[k] = nch_redueced_1t[k] - np.floor(ratio) * period
+
+                channels = nch_redueced_1t - (timebase + ramp)
+
+            # Read in the 3D modeled response. 3D data unit: T/s
+            field_3d = read_em3d_raw(str(field_filename), n_rec, n_iters, channels, str(channel_file),
+                                     ZeroTimeShift=None, interp=False)
+            return field_3d
 
         def write_time_decay_files(channels, stns, fieldx, fieldy, fieldz, out_path):
             """
@@ -207,19 +222,22 @@ class MUNFile:
                     file.write(f"{station_names[i]:^8}{'Y':^8}{''.join(y)}\n")
                     file.write(f"{station_names[i]:^8}{'Z':^8}{''.join(z)}\n")
 
-            # os.startfile(out_path)
-
         folder = Path(folder)
-        primary_folder = Path(primary_folder)
+        if primary_folder is None:
+            primary_folder = list(folder.glob(r"*_primary"))
+            assert primary_folder, f"{str(primary_folder)} is not a directory."
+            primary_folder = primary_folder[0]
+        else:
+            primary_folder = Path(primary_folder)
+            assert primary_folder, f"{str(primary_folder)} is not a directory."
+
         print(f"Converting files in {folder.name}")
         t = time.time()
 
         assert folder.is_dir(), f"{str(folder)} is not a directory."
-        assert primary_folder, f"{str(primary_folder)} is not a directory."
 
         data_results = [p for p in list(folder.rglob(r"*")) if p.is_dir() and "primary" not in str(p)]
         assert data_results, F"No folders found in {folder.name}."
-        # prim_folder = list(folder.rglob("*_primary"))
 
         channels = np.array([-1.9500, -1.8500, -1.7500, -1.6500, -1.5500, -1.4495, -1.3500,
                              -1.2500, -1.1500, -1.0500, -0.9500, -0.8500, -0.7500, -0.6500,
@@ -232,36 +250,51 @@ class MUNFile:
                              53.9250, 55.7050, 58.0700, 61.1600, 71.2300, 87.8950, 97.1150])
         channels = channels * 1e-3
 
+        field_pri_3d = get_field_data(primary_folder, channels, primary_field=True)
+
         for data_folder in data_results:
-            print(f"Converting {data_folder.name}.")
-            # read the primary 3D response
-            field_filename = data_folder.joinpath(r'iTr=001_dBdt.dat')
-            channel_file = data_folder.joinpath(r'time_stepping_scheme.txt')
-            time_iters_filename = data_folder.joinpath(r'time_iterations.dat')
+            print(f"Converting {data_folder}.")
+            print(f"Using primary folder {primary_folder}")
+
             obs_filename = data_folder.joinpath(r'iTr=001_observation_points_coordinates.xyz')
-
             stn = read_observation_line(str(obs_filename), whichColumn=2)
-            n_rec = stn.size
-
-            # The number of actual time iterations
-            time_iters = np.loadtxt(str(time_iters_filename), dtype=float)
-            n_iters = time_iters.size
 
             # Read in the 3D modeled response. 3D data unit: T/s
-            field_3d = read_em3d_raw(str(field_filename), n_rec, n_iters, channels, str(channel_file),
-                                     ZeroTimeShift=None, interp=False)
-            field_pri_3d = get_primary_field_data(primary_folder, channels, n_rec, n_iters)
+            field_3d = get_field_data(data_folder, channels, primary_field=False)
 
             field_3d = field_3d - field_pri_3d
             field_3d = field_3d * 1e+9  # For nT
+
+            if output_folder is None:
+                output_folder = folder
+            else:
+                output_folder = Path(output_folder)
+
+            # """ Aspect Ratio naming """
+            # conductance = re.sub(r"results_50msec_", "", str(data_folder.name))
+            # conductance = re.sub(r"_set2", "", conductance).upper()
+            # if conductance == "100S":
+            #     letter = "A"
+            # elif conductance == "1KS":
+            #     letter = "B"
+            # elif conductance == "10KS":
+            #     letter = "C"
+            # else:
+            #     raise ValueError(F"{conductance} is invalid.")
+            # """ Aspect Ratio naming END """
+
+            out_path = output_folder.joinpath(data_folder.parent.name).with_suffix(".DAT")
+            # out_name = re.sub("m", letter, out_path.name)
+            # out_path = out_path.with_name(out_name)
 
             write_time_decay_files(channels,
                                    stn,
                                    np.transpose(field_3d[:, :, 0]),
                                    np.transpose(field_3d[:, :, 1]),
                                    np.transpose(field_3d[:, :, 2]),
-                                   str(folder.joinpath(data_folder.name).with_suffix(".DAT")))
+                                   str(out_path))
 
+        print(F"Conversion process complete.")
         print(f"Conversion time for {folder.name}: {int(math.floor((time.time() - t) / 60)):02d}:{int(time.time() % 60):02d}.")
 
     def parse(self, filepath):
@@ -297,13 +330,41 @@ class MUNFile:
 if __name__ == '__main__':
     parser = MUNFile()
 
-    # sample_files = Path(__file__).parents[2].joinpath('sample_files')
-    # file = sample_files.joinpath(r'MUN files\LONG_V1x1_450_50_100_50msec_3D_solution_channels_tem_time_decay_z.dat')
+    def convert_folders():
+        t = time.time()
+        base_folder = r"A:\IRAP\All_3D_data_files\Two-way induction"
+        sub_folders = Path(base_folder).glob(r"*")
+        sub_folders = [s for s in sub_folders if s.is_dir() and "plots" not in str(s)]
+        out_folder = samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN")
 
-    file = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m\5x150m\results_50msec_1kS_set2.DAT"
-    mun_file = parser.parse(file)
+        converter = MUNFile()
+        for ind, folder in enumerate(sub_folders):
+            if "Model" in str(folder):
+                continue
+            print(f"Converting folder {ind + 1}/{len(sub_folders)}.")
+            converter.convert(folder,
+                              # primary_folder=r"A:\IRAP\All_3D_data_files\Aspect Ratio\600m\600x600m\results_50msec_100S_set2_primary",
+                              output_folder=out_folder)
 
-    # folder = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m\5x150m"
+        print(f"Process complete after: {int(math.floor((time.time() - t) / 60)):02d}:{int(time.time() % 60):02d}.")
+
+    def test_parsing(folder):
+        """Try parsing every file in folder"""
+        files = folder.glob("*.dat")
+        for file in files:
+            mun_file = MUNFile()
+            mun_file.parse(file)
+
+        print(f"Parsing complete.")
+
+    samples_folder = Path(__file__).parents[2].joinpath('sample_files')
+    test_parsing(samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN"))
+    # convert_folders()
+
+    # file = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m\5x150m\results_50msec_1kS_set2.DAT"
+    # mun_file = parser.parse(file)
+
+    # folder = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m\150x150m"
     # primary_folder = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m\5x150m\results_50msec_100S_set2_primary"
     # mun_file = MUNFile()
     # mun_file.convert(folder, primary_folder)

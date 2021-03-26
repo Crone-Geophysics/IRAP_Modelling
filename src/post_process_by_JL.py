@@ -258,10 +258,15 @@ def read_em3d_raw(filename, n_rec, n_step, ch, t_filename, interp=False,
     # The number of channels based on ch
     nch = ch.size
 
+    # print(f"Check: {(len(data) / n_step)} == {n_rec} = {(len(data) / n_step) == n_rec}")
+
     # Extract the information from data to field(n_step, n_rec, n_comp)
     istart = 0
     for istep in range(n_step):
+        # print(F"istep: {istep}")
         istop = istart + n_rec
+        # print(F"istop: {istop}\n")
+        # print(f"Adding data: {data[istart:istop, :]}")
         field[istep, :, :] = data[istart:istop, :]
         istart = istop
 

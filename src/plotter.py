@@ -740,6 +740,7 @@ class TestRunner(QMainWindow, test_runnerUI):
 
         # Signals
         self.actionConvert_IRAP_File.triggered.connect(self.open_irap_converter)
+        self.actionConvert_MUN_File.triggered.connect(self.open_mun_converter)
         self.add_folder_btn.clicked.connect(self.add_row)
         self.change_pdf_path_btn.clicked.connect(change_pdf_path)
         self.table.cellClicked.connect(self.cell_clicked)
@@ -766,6 +767,18 @@ class TestRunner(QMainWindow, test_runnerUI):
         if irap_file:
             parser = IRAPFile()
             parser.convert(irap_file)
+
+    def open_mun_converter(self):
+        """
+        Convert the files in a MUN folder. Saves to the same directory.
+        """
+        default_path = str(Path(__file__).parents[1].joinpath('sample_files'))
+        dlg = QFileDialog()
+        mun_folderpath = dlg.getExistingDirectory(self, "Select MUN Folder", default_path)
+
+        if mun_folderpath:
+            mun_file = MUNFile()
+            mun_file.convert(mun_folderpath)
 
     def add_row(self, folderpath=None, file_type=None):
         """Add a row to the table"""
@@ -1948,27 +1961,27 @@ if __name__ == '__main__':
         tester = TestRunner()
         tester.show()
 
-        tester.plot_profiles_rbtn.setChecked(True)
-        tester.test_name_edit.setText(r"Two-Way Induction - 300mx100m Plate")
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Two-Way Induction\300x100 Two-Way Induction (100S, Fixed Y).PDF")))
-        tester.fixed_range_cbox.setChecked(True)
+        # tester.plot_profiles_rbtn.setChecked(True)
+        # tester.test_name_edit.setText(r"Two-Way Induction - 300mx100m Plate")
         # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Two-Way Induction\300x100 Two-Way Induction (100S).PDF")))
-
-        # Maxwell
-        maxwell_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\Maxwell")
-        tester.add_row(str(maxwell_dir), "Maxwell")
-        tester.table.item(0, 2).setText("0.000001")
-        tester.table.item(0, 4).setText("21")
-        tester.table.item(0, 5).setText("44")
-
-        # Plate
-        plate_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\PLATE")
-        tester.add_row(str(plate_dir), "PLATE")
-        tester.table.item(1, 7).setText("0.5")
-
-        tester.print_pdf()
+        #     r"Two-Way Induction\300x100 Two-Way Induction (100S, Fixed Y).PDF")))
+        # tester.fixed_range_cbox.setChecked(True)
+        # # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+        # #     r"Two-Way Induction\300x100 Two-Way Induction (100S).PDF")))
+        #
+        # # Maxwell
+        # maxwell_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\Maxwell")
+        # tester.add_row(str(maxwell_dir), "Maxwell")
+        # tester.table.item(0, 2).setText("0.000001")
+        # tester.table.item(0, 4).setText("21")
+        # tester.table.item(0, 5).setText("44")
+        #
+        # # Plate
+        # plate_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\PLATE")
+        # tester.add_row(str(plate_dir), "PLATE")
+        # tester.table.item(1, 7).setText("0.5")
+        #
+        # tester.print_pdf()
 
     def plot_run_on_comparison():
         tester = TestRunner()
@@ -2476,8 +2489,8 @@ if __name__ == '__main__':
             os.startfile(output)
 
     # TODO Change "MUN" to "EM3D"
-    plot_aspect_ratio()
-    # plot_two_way_induction()
+    # plot_aspect_ratio()
+    plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
