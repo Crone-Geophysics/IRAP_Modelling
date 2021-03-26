@@ -236,7 +236,7 @@ class FEMPlotter(QMainWindow, fem_plotterUI):
                         pdf.savefig(save_figure, orientation='landscape')
 
             self.statusBar().showMessage(f"PDF saved to {filepath}.", 1500)
-            os.startfile(filepath)
+            # os.startfile(filepath)
 
     def open_file_dialog(self):
         """Open files through the file dialog"""
@@ -1254,7 +1254,7 @@ class TestRunner(QMainWindow, test_runnerUI):
                 count += 1
                 progress.setValue(count)
 
-        os.startfile(pdf_filepath)
+        # os.startfile(pdf_filepath)
 
     def print_decays(self, num_files_found, plotting_files, pdf_filepath):
         """
@@ -1428,7 +1428,7 @@ class TestRunner(QMainWindow, test_runnerUI):
                 count += 1
                 progress.setValue(count)
 
-        os.startfile(pdf_filepath)
+        # os.startfile(pdf_filepath)
 
     def print_run_on_comparison(self, plotting_files, pdf_filepath):
         """
@@ -1581,7 +1581,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             if plotting_files['PLATE']:
                 plot_plate(plotting_files['PLATE'], pdf)
 
-        os.startfile(pdf_filepath)
+        # os.startfile(pdf_filepath)
 
     def print_run_on_convergence(self, plotting_files, pdf_filepath):
         """
@@ -1729,7 +1729,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             if plotting_files['Maxwell']:
                 plot_maxwell_convergence(plotting_files['Maxwell'], pdf)
 
-        os.startfile(pdf_filepath)
+        # os.startfile(pdf_filepath)
 
     def tabulate_run_on_convergence(self, plotting_files):
 
@@ -1834,14 +1834,14 @@ class TestRunner(QMainWindow, test_runnerUI):
 
             convergence_df['Required_half_cycles'] = convergences
             convergence_df.loc[:, "Required_half_cycles"].to_csv(output_filepath)
-            os.startfile(output_filepath)
+            # os.startfile(output_filepath)
 
         output_filepath = self.output_filepath_edit.text()
 
         if plotting_files['Maxwell']:
             tabulate_maxwell_convergence(plotting_files['Maxwell'])
 
-    def print_pdf(self):
+    def print_pdf(self, from_script=False):
         """Create the PDF"""
         if self.table.rowCount() == 0:
             return
@@ -1858,13 +1858,16 @@ class TestRunner(QMainWindow, test_runnerUI):
             num_files.append(self.table.item(row, self.header_labels.index("Files Found")).text())
 
         if not all([int(num) == int(num_files[0]) for num in num_files]):
-            response = self.msg.question(self, "Unequal Files", "A different number of files was found for each "
-                                                                "filetype. Do you wish to only plot common files?",
-                                         self.msg.Yes, self.msg.No)
-            if response == self.msg.Yes:
-                opened_files = self.match_files()
+            if from_script is False:
+                response = self.msg.question(self, "Unequal Files", "A different number of files was found for each "
+                                                                    "filetype. Do you wish to only plot common files?",
+                                             self.msg.Yes, self.msg.No)
+                if response == self.msg.Yes:
+                    opened_files = self.match_files()
+                else:
+                    return
             else:
-                return
+                opened_files = self.match_files()
         else:
             opened_files = self.opened_files.copy()
 
@@ -1894,7 +1897,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         elif self.table_run_on_convergence_rbtn.isChecked():
             self.tabulate_run_on_convergence(plotting_files)
 
-        print(f"Process complete after {(time.time() - t0) / 60:02.0f}:{(time.time() - t0) % 60:02.0f}")
+        print(f"Plotting complete after {math.floor((time.time() - t0) / 60):02.0f}:{(time.time() - t0) % 60:02.0f}")
 
 
 if __name__ == '__main__':
@@ -1912,61 +1915,102 @@ if __name__ == '__main__':
         tester = TestRunner()
         tester.show()
 
-        tester.plot_profiles_rbtn.setChecked(True)
-        tester.test_name_edit.setText(r"Aspect Ratio")
-        # tester.fixed_range_cbox.setChecked(True)
-        tester.include_edit.setText("150")
-        tester.include_edit.editingFinished.emit()
+        # # Maxwell
+        # maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
+        # tester.add_row(str(maxwell_dir), "Maxwell")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
 
-        # Maxwell
-        maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
-        tester.add_row(str(maxwell_dir), "Maxwell")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
+        # MUN
+        mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
+        tester.add_row(str(mun_dir), "MUN")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-200")
         tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
         tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
 
         # # Plate
         # plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
         # tester.add_row(str(plate_dir), "PLATE")
         # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-        #
-        # # Peter
-        # irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
-        # tester.add_row(str(irap_dir), "IRAP")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-        #
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Aspect Ratio\Aspect Ratio - 150m plate.PDF")))
-        tester.print_pdf()
 
-        # tester.custom_stations_cbox.setChecked(True)
-        # tester.station_start_sbox.setValue(0)
-        # tester.station_end_sbox.setValue(200)
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF")))
-        # tester.print_pdf()
-        #
-        # tester.custom_stations_cbox.setChecked(False)
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Aspect Ratio\Aspect Ratio - 600m plate.PDF")))
-        # tester.include_edit.setText("600")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
-        #
-        # tester.custom_stations_cbox.setChecked(True)
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF")))
-        # tester.print_pdf()
+        # Peter
+        irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
+        tester.add_row(str(irap_dir), "IRAP")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
 
-        print(f"Total time: {(time.time() - t) / 60:.0f}:{(time.time() - t) % 60:.0f}")
+        """ Plotting """
+        tester.plot_profiles_rbtn.setChecked(True)
+
+        tester.custom_stations_cbox.setChecked(False)
+        tester.y_cbox.setChecked(False)
+        tester.test_name_edit.setText(r"Aspect Ratio")
+        # tester.fixed_range_cbox.setChecked(True)
+        tester.include_edit.setText("150")
+        tester.include_edit.editingFinished.emit()
+
+        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate.PDF"))
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf(from_script=True)
+        # os.startfile(pdf_file)
+
+        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF"))
+        tester.custom_stations_cbox.setChecked(True)
+        tester.station_start_sbox.setValue(0)
+        tester.station_end_sbox.setValue(200)
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf(from_script=True)
+
+        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate.PDF"))
+        tester.custom_stations_cbox.setChecked(False)
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.include_edit.setText("600")
+        tester.include_edit.editingFinished.emit()
+        tester.print_pdf(from_script=True)
+
+        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF"))
+        tester.custom_stations_cbox.setChecked(True)
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf(from_script=True)
+
+        """ Log Y """
+        tester.log_y_cbox.setChecked(True)
+        tester.custom_stations_cbox.setChecked(False)
+
+        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate [LOG].PDF"))
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf(from_script=True)
+
+        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200) [LOG].PDF"))
+        tester.custom_stations_cbox.setChecked(True)
+        tester.station_start_sbox.setValue(0)
+        tester.station_end_sbox.setValue(200)
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf(from_script=True)
+
+        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate [LOG].PDF"))
+        tester.custom_stations_cbox.setChecked(False)
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.include_edit.setText("600")
+        tester.include_edit.editingFinished.emit()
+        tester.print_pdf(from_script=True)
+
+        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200) [LOG].PDF"))
+        tester.custom_stations_cbox.setChecked(True)
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf(from_script=True)
+
+        print(f"Total time: {math.floor((time.time() - t) / 60):02.0f}:{(time.time() - t) % 60:2.0f}")
 
     def plot_two_way_induction():
         t = time.time()
         tester = TestRunner()
         tester.show()
 
+        tester.custom_stations_cbox.setChecked(False)
         tester.plot_profiles_rbtn.setChecked(True)
         tester.y_cbox.setChecked(False)
         tester.test_name_edit.setText(r"Two-Way Induction")
@@ -1998,10 +2042,10 @@ if __name__ == '__main__':
         # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
         # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
 
+        """Plotting"""
         pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S.PDF"))
         tester.output_filepath_edit.setText(pdf_file)
         tester.print_pdf()
-        os.startfile(pdf_file)
 
         pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S (Station 0-200).PDF"))
         tester.custom_stations_cbox.setChecked(True)
@@ -2009,9 +2053,22 @@ if __name__ == '__main__':
         tester.station_end_sbox.setValue(200)
         tester.output_filepath_edit.setText(pdf_file)
         tester.print_pdf()
-        os.startfile(pdf_file)
 
-        print(f"Total time: {(time.time() - t) / 60:.0f}:{(time.time() - t) % 60:.0f}")
+        """LOG Y"""
+        tester.log_y_cbox.setChecked(True)
+        tester.custom_stations_cbox.setChecked(False)
+        pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S [LOG].PDF"))
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf()
+
+        pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S (Station 0-200) [LOG].PDF"))
+        tester.custom_stations_cbox.setChecked(True)
+        tester.station_start_sbox.setValue(0)
+        tester.station_end_sbox.setValue(200)
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf()
+
+        print(f"Total time: {math.floor((time.time() - t) / 60):02.0f}:{(time.time() - t) % 60:.0f}")
 
     def plot_run_on_comparison():
         tester = TestRunner()
@@ -2519,8 +2576,8 @@ if __name__ == '__main__':
         #     os.startfile(output)
 
     # TODO Change "MUN" to "EM3D"
-    # plot_aspect_ratio()
-    plot_two_way_induction()
+    plot_aspect_ratio()
+    # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()

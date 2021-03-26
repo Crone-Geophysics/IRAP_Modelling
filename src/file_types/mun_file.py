@@ -133,13 +133,14 @@ class MUNFile:
         self.data = pd.DataFrame()
 
     @staticmethod
-    def convert(folder, primary_folder=None, output_folder=None):
+    def convert(folder, primary_folder=None, output_folder=None, ar=False):
         """
         Convert Jianbo's data folder into TEM-like files.
         :param folder: str or Path, parent folder which contains model data. Subfolders inside this folder should have
         the data files.
         :param primary_folder: str or Path, parent folder which contains the primary field data.
         :param output_folder: str or Path, folder to save all the files to.
+        :param ar: Bool, if converting Aspect Ratio test (for naming)
         """
 
         def get_field_data(data_folder, channels, primary_field=False):
@@ -182,11 +183,11 @@ class MUNFile:
                                      ZeroTimeShift=None, interp=False)
             return field_3d
 
-        def write_time_decay_files(channels, stns, fieldx, fieldy, fieldz, out_path):
+        def write_time_decay_files(channels, stations, fieldx, fieldy, fieldz, out_path):
             """
             Write the text file in a format similar to a TEM file.
             :param channels: list of floats, channel times.
-            :param stns: list of floats, station numbers.
+            :param stations: list of floats, station numbers.
             :param fieldx: 2D np array
             :param fieldy: 2D np array
             :param fieldz: 2D np array
@@ -195,15 +196,15 @@ class MUNFile:
             channels = channels * 1e3
             with open(out_path, 'w') as file:
 
-                nstn, n_ch = fieldx.shape
-                station_names = [f"{i + 1}" for i in stns]
+                num_stations, num_channels = fieldx.shape
+                station_names = [f"{i + 1}" for i in stations]
                 station_names = [f"{i:^8}" for i in station_names]
                 channel_names = [f"CH{i + 1}" for i in range(len(channels))]
                 channel_names = [f"{i:^15}" for i in channel_names]
 
                 file.write("Data type: dB/dt; UNIT: nT/s\n")
-                file.write(f"Number of stations: {nstn}\n")
-                file.write(f"Stations (m): {' '.join([str(s) for s in stns]):^10}\n")
+                file.write(f"Number of stations: {num_stations}\n")
+                file.write(f"Stations (m): {' '.join([str(s) for s in stations]):^10}\n")
                 file.write(f"Channel times (ms):\n")
 
                 # Add the channel times
@@ -214,7 +215,8 @@ class MUNFile:
                 file.write(f"{'Station':^8}{'Component':^8}{''.join(channel_names)}\n")
 
                 # Add the data
-                for i in range(n_ch):
+                print(f"Stations {stations.min()} - {stations.max()}")
+                for i in range(num_stations):
                     x = [f"{x:^ 15.5E}" for x in fieldx[i, :]]
                     y = [f"{x:^ 15.5E}" for x in fieldy[i, :]]
                     z = [f"{x:^ 15.5E}" for x in fieldz[i, :]]
@@ -262,6 +264,7 @@ class MUNFile:
             # Read in the 3D modeled response. 3D data unit: T/s
             field_3d = get_field_data(data_folder, channels, primary_field=False)
 
+            assert len(stn) == field_3d.shape[1], f"Number of stations is not equal to size of field_3d ({len(stn)} vs {field_3d.shape[1]})"
             field_3d = field_3d - field_pri_3d
             field_3d = field_3d * 1e+9  # For nT
 
@@ -270,22 +273,25 @@ class MUNFile:
             else:
                 output_folder = Path(output_folder)
 
-            # """ Aspect Ratio naming """
-            # conductance = re.sub(r"results_50msec_", "", str(data_folder.name))
-            # conductance = re.sub(r"_set2", "", conductance).upper()
-            # if conductance == "100S":
-            #     letter = "A"
-            # elif conductance == "1KS":
-            #     letter = "B"
-            # elif conductance == "10KS":
-            #     letter = "C"
-            # else:
-            #     raise ValueError(F"{conductance} is invalid.")
-            # """ Aspect Ratio naming END """
+            if ar is True:
+                """ Aspect Ratio naming """
+                conductance = re.sub(r"results_50msec_", "", str(data_folder.name))
+                conductance = re.sub(r"_set2", "", conductance).upper()
+                if conductance == "100S":
+                    letter = "A"
+                elif conductance == "1KS":
+                    letter = "B"
+                elif conductance == "10KS":
+                    letter = "C"
+                else:
+                    raise ValueError(F"{conductance} is invalid.")
+                """ Aspect Ratio naming END """
 
-            out_path = output_folder.joinpath(data_folder.parent.name).with_suffix(".DAT")
-            # out_name = re.sub("m", letter, out_path.name)
-            # out_path = out_path.with_name(out_name)
+                out_path = output_folder.joinpath(data_folder.parent.name).with_suffix(".DAT")
+                out_name = re.sub("m", letter, out_path.name)
+                out_path = out_path.with_name(out_name)
+            else:
+                out_path = output_folder.joinpath(data_folder.parent.name).with_suffix(".DAT")
 
             write_time_decay_files(channels,
                                    stn,
@@ -332,10 +338,27 @@ if __name__ == '__main__':
 
     def convert_folders():
         t = time.time()
-        base_folder = r"A:\IRAP\All_3D_data_files\Two-way induction"
+
+        # """Two-way induction"""
+        # base_folder = r"A:\IRAP\All_3D_data_files\Two-way induction"
+        # sub_folders = Path(base_folder).glob(r"*")
+        # sub_folders = [s for s in sub_folders if s.is_dir() and "Model5" not in str(s)]
+        # out_folder = samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN")
+        #
+        # converter = MUNFile()
+        # for ind, folder in enumerate(sub_folders):
+        #     if "Model" in str(folder):
+        #         continue
+        #     print(f"Converting folder {ind + 1}/{len(sub_folders)}.")
+        #     converter.convert(folder,
+        #                       output_folder=out_folder,
+        #                       ar=False)
+
+        """Aspect Ratio 150m"""
+        base_folder = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m"
         sub_folders = Path(base_folder).glob(r"*")
         sub_folders = [s for s in sub_folders if s.is_dir() and "plots" not in str(s)]
-        out_folder = samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN")
+        out_folder = samples_folder.joinpath(r"Aspect ratio\MUN")
 
         converter = MUNFile()
         for ind, folder in enumerate(sub_folders):
@@ -343,8 +366,24 @@ if __name__ == '__main__':
                 continue
             print(f"Converting folder {ind + 1}/{len(sub_folders)}.")
             converter.convert(folder,
-                              # primary_folder=r"A:\IRAP\All_3D_data_files\Aspect Ratio\600m\600x600m\results_50msec_100S_set2_primary",
-                              output_folder=out_folder)
+                              output_folder=out_folder,
+                              ar=True)
+
+        """Aspect Ratio 600m"""
+        base_folder = r"A:\IRAP\All_3D_data_files\Aspect Ratio\600m"
+        sub_folders = Path(base_folder).glob(r"*")
+        sub_folders = [s for s in sub_folders if s.is_dir() and "plots" not in str(s)]
+        out_folder = samples_folder.joinpath(r"Aspect ratio\MUN")
+
+        converter = MUNFile()
+        for ind, folder in enumerate(sub_folders):
+            if "Model" in str(folder):
+                continue
+            print(f"Converting folder {ind + 1}/{len(sub_folders)}.")
+            converter.convert(folder,
+                              primary_folder=r"A:\IRAP\All_3D_data_files\Aspect Ratio\600m\600x600m\results_50msec_100S_set2_primary",
+                              output_folder=out_folder,
+                              ar=True)
 
         print(f"Process complete after: {int(math.floor((time.time() - t) / 60)):02d}:{int(time.time() % 60):02d}.")
 
@@ -358,8 +397,8 @@ if __name__ == '__main__':
         print(f"Parsing complete.")
 
     samples_folder = Path(__file__).parents[2].joinpath('sample_files')
-    test_parsing(samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN"))
-    # convert_folders()
+    # test_parsing(samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN"))
+    convert_folders()
 
     # file = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m\5x150m\results_50msec_1kS_set2.DAT"
     # mun_file = parser.parse(file)
