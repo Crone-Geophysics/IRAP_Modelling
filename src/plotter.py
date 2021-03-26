@@ -1,34 +1,34 @@
-import sys
+import io
+import math
 import os
 import pickle
-import io
 import re
-import math
-import numpy as np
-import pandas as pd
+import sys
+import time
+from itertools import zip_longest
 from pathlib import Path
+
 import matplotlib
 import matplotlib.pyplot as plt
-from itertools import zip_longest
-from natsort import natsorted, os_sorted
-
+import numpy as np
+import pandas as pd
+from PyQt5 import (QtCore, QtGui, uic)
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QMessageBox, QFrame, QErrorMessage, QFileDialog,
+                             QTableWidgetItem, QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QLineEdit,
+                             QProgressDialog, QWidget, QHeaderView, QPushButton, QColorDialog)
+from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, \
     NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.pyplot import cm
-from matplotlib.backends.backend_pdf import PdfPages
-from matplotlib.ticker import FormatStrFormatter
 from matplotlib.ticker import MaxNLocator
+from natsort import natsorted, os_sorted
 
-from src.file_types.fem_file import FEMFile, FEMTab
-from src.file_types.tem_file import TEMFile, TEMTab
-from src.file_types.platef_file import PlateFFile, PlateFTab
+from src.file_types.fem_file import FEMTab
 from src.file_types.irap_file import IRAPFile
 from src.file_types.mun_file import MUNFile, MUNTab
-from PyQt5 import (QtCore, QtGui, uic)
-from PyQt5.QtWidgets import (QMainWindow, QApplication, QMessageBox, QFrame, QErrorMessage, QFileDialog,
-                             QTableWidgetItem, QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QLineEdit,
-                             QProgressDialog, QWidget, QHeaderView, QPushButton, QColorDialog)
+from src.file_types.platef_file import PlateFFile, PlateFTab
+from src.file_types.tem_file import TEMFile, TEMTab
 
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
@@ -52,7 +52,6 @@ test_runnerUI, _ = uic.loadUiType(TestRunnerUIFile)
 matplotlib.use('Qt5Agg')
 rainbow_colors = iter(cm.rainbow(np.linspace(0, 1, 20)))
 quant_colors = np.nditer(np.array(plt.rcParams['axes.prop_cycle'].by_key()['color']))
-
 
 # iter_colors = np.nditer(quant_colors)
 # quant_colors = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
@@ -784,7 +783,7 @@ class TestRunner(QMainWindow, test_runnerUI):
         """Add a row to the table"""
         # File type options with extensions
         options = {"Maxwell": "*.TEM", "MUN": "*.DAT", "IRAP": "*.DAT", "PLATE": "*.DAT"}
-        colors = {"Maxwell": '#0000FF', "MUN": '##00FF00', "IRAP": "#000000", "PLATE": '#FF0000'}
+        colors = {"Maxwell": '#0000FF', "MUN": '#00FF00', "IRAP": "#000000", "PLATE": '#FF0000'}
 
         # Don't include filetypes that are already selected
         existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
@@ -898,6 +897,7 @@ class TestRunner(QMainWindow, test_runnerUI):
             else:
                 return Path(filepath).stem.upper()
 
+        print(F"Matching files.")
         # Find which stems are common in each list
         df = pd.DataFrame(self.opened_files).T
         df_stems = df.applymap(get_stem).to_numpy()
@@ -1060,12 +1060,12 @@ class TestRunner(QMainWindow, test_runnerUI):
                     self.msg.warning(self, "Different Units", f"The units of {file.filepath.name} are different then "
                                                               f"the existing units ({file.units} vs {self.units})")
 
-            channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
+            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
             min_ch = properties['ch_start'] - 1
             max_ch = min(properties['ch_end'] - 1, len(channels) - 1)
             plotting_channels = channels[min_ch: max_ch + 1]
 
-            comp_data = file.data[file.data.COMPONENT == component]
+            comp_data = file.data[file.data.Component == component]
 
             if comp_data.empty:
                 print(f"No {component} data in {file.filepath.name}.")
@@ -1075,10 +1075,16 @@ class TestRunner(QMainWindow, test_runnerUI):
                 # If coloring by channel, uses the rainbow color iterator and the label is the channel number.
                 if ind == 0:
                     label = f"{file.filepath.name.upper()} (MUN)"
+
+                    if min_ch == max_ch:
+                        self.footnote += f"MUN file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
+                    else:
+                        self.footnote += f"MUN file plotting channels {min_ch + 1}-{max_ch + 1}" \
+                                         f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
                 else:
                     label = None
 
-                x = comp_data.STATION.astype(float) + properties['station_shift']
+                x = comp_data.Station.astype(float) + properties['station_shift']
                 y = comp_data.loc[:, ch].astype(float) * properties['scaling']
 
                 self.ax.plot(x, y,
@@ -1242,7 +1248,6 @@ class TestRunner(QMainWindow, test_runnerUI):
                         plot_plate(plate_file, component)
 
                     format_figure(component)
-                    # plt.show()
                     pdf.savefig(self.figure, orientation='landscape')
                     self.ax.clear()
 
@@ -1852,14 +1857,14 @@ class TestRunner(QMainWindow, test_runnerUI):
         for row in range(self.table.rowCount()):
             num_files.append(self.table.item(row, self.header_labels.index("Files Found")).text())
 
-        if not all([int(num) == num_files[0] for num in num_files]):
-            # response = self.msg.question(self, "Unequal Files", "A different number of files was found for each "
-            #                                                     "filetype. Do you wish to only plot common files?",
-            #                              self.msg.Yes, self.msg.No)
-            # if response == self.msg.Yes:
-            opened_files = self.match_files()
-            # else:
-            #     return
+        if not all([int(num) == int(num_files[0]) for num in num_files]):
+            response = self.msg.question(self, "Unequal Files", "A different number of files was found for each "
+                                                                "filetype. Do you wish to only plot common files?",
+                                         self.msg.Yes, self.msg.No)
+            if response == self.msg.Yes:
+                opened_files = self.match_files()
+            else:
+                return
         else:
             opened_files = self.opened_files.copy()
 
@@ -1921,17 +1926,17 @@ if __name__ == '__main__':
         tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
         tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
 
-        # Plate
-        plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
-        tester.add_row(str(plate_dir), "PLATE")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-
-        # Peter
-        irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
-        tester.add_row(str(irap_dir), "IRAP")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-
+        # # Plate
+        # plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
+        # tester.add_row(str(plate_dir), "PLATE")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+        #
+        # # Peter
+        # irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
+        # tester.add_row(str(irap_dir), "IRAP")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+        #
         tester.output_filepath_edit.setText(str(sample_files.joinpath(
             r"Aspect Ratio\Aspect Ratio - 150m plate.PDF")))
         tester.print_pdf()
@@ -1958,30 +1963,55 @@ if __name__ == '__main__':
         print(f"Total time: {(time.time() - t) / 60:.0f}:{(time.time() - t) % 60:.0f}")
 
     def plot_two_way_induction():
+        t = time.time()
         tester = TestRunner()
         tester.show()
 
-        # tester.plot_profiles_rbtn.setChecked(True)
-        # tester.test_name_edit.setText(r"Two-Way Induction - 300mx100m Plate")
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Two-Way Induction\300x100 Two-Way Induction (100S, Fixed Y).PDF")))
-        # tester.fixed_range_cbox.setChecked(True)
-        # # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        # #     r"Two-Way Induction\300x100 Two-Way Induction (100S).PDF")))
-        #
-        # # Maxwell
-        # maxwell_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\Maxwell")
-        # tester.add_row(str(maxwell_dir), "Maxwell")
-        # tester.table.item(0, 2).setText("0.000001")
-        # tester.table.item(0, 4).setText("21")
-        # tester.table.item(0, 5).setText("44")
-        #
-        # # Plate
-        # plate_dir = sample_files.joinpath(r"Two-Way Induction\300x100\100S\PLATE")
-        # tester.add_row(str(plate_dir), "PLATE")
-        # tester.table.item(1, 7).setText("0.5")
-        #
-        # tester.print_pdf()
+        tester.plot_profiles_rbtn.setChecked(True)
+        tester.y_cbox.setChecked(False)
+        tester.test_name_edit.setText(r"Two-Way Induction")
+
+        # Maxwell
+        maxwell_dir = sample_files.joinpath(r"Two-way induction\300x100\100S\Maxwell")
+        tester.add_row(str(maxwell_dir), "Maxwell")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
+
+        # MUN
+        mun_dir = sample_files.joinpath(r"Two-way induction\300x100\100S\MUN")
+        tester.add_row(str(mun_dir), "MUN")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("300")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+
+        # Plate
+        plate_dir = sample_files.joinpath(r"Two-way induction\300x100\100S\PLATE")
+        tester.add_row(str(plate_dir), "PLATE")
+        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+
+        # # Peter
+        # irap_dir = sample_files.joinpath(r"Two-way induction\300x100\100S\IRAP")
+        # tester.add_row(str(irap_dir), "IRAP")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+
+        pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S.PDF"))
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf()
+        os.startfile(pdf_file)
+
+        pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S (Station 0-200).PDF"))
+        tester.custom_stations_cbox.setChecked(True)
+        tester.station_start_sbox.setValue(0)
+        tester.station_end_sbox.setValue(200)
+        tester.output_filepath_edit.setText(pdf_file)
+        tester.print_pdf()
+        os.startfile(pdf_file)
+
+        print(f"Total time: {(time.time() - t) / 60:.0f}:{(time.time() - t) % 60:.0f}")
 
     def plot_run_on_comparison():
         tester = TestRunner()
@@ -2434,59 +2464,59 @@ if __name__ == '__main__':
             plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=False, log=False)
             os.startfile(output)
 
-        """10 S"""
-        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 10S.PDF")
-        with PdfPages(output) as pdf:
-            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt X.xlsx")
-            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt Z.xlsx")
-            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-
-            plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=False, log=False)
-            os.startfile(output)
-
-        """100 S"""
-        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 100S.PDF")
-        with PdfPages(output) as pdf:
-            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt X.xlsx")
-            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt Z.xlsx")
-            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-
-            plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=False)
-            os.startfile(output)
-
-        """ Log Scale """
-        """1 S"""
-        output = sample_files.joinpath(
-            r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 1S (log).PDF")
-        with PdfPages(output) as pdf:
-            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt X.xlsx")
-            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt Z.xlsx")
-            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-
-            plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=False, log=True)
-            os.startfile(output)
-
-        """10 S"""
-        output = sample_files.joinpath(
-            r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 10S (log).PDF")
-        with PdfPages(output) as pdf:
-            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt X.xlsx")
-            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt Z.xlsx")
-            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-
-            plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=False, log=True)
-            os.startfile(output)
-
-        """100 S"""
-        output = sample_files.joinpath(
-            r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 100S (log).PDF")
-        with PdfPages(output) as pdf:
-            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt X.xlsx")
-            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt Z.xlsx")
-            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-
-            plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=True)
-            os.startfile(output)
+        # """10 S"""
+        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 10S.PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=False, log=False)
+        #     os.startfile(output)
+        #
+        # """100 S"""
+        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 100S.PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=False)
+        #     os.startfile(output)
+        #
+        # """ Log Scale """
+        # """1 S"""
+        # output = sample_files.joinpath(
+        #     r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 1S (log).PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=False, log=True)
+        #     os.startfile(output)
+        #
+        # """10 S"""
+        # output = sample_files.joinpath(
+        #     r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 10S (log).PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=False, log=True)
+        #     os.startfile(output)
+        #
+        # """100 S"""
+        # output = sample_files.joinpath(
+        #     r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 100S (log).PDF")
+        # with PdfPages(output) as pdf:
+        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt X.xlsx")
+        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt Z.xlsx")
+        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+        #
+        #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=True)
+        #     os.startfile(output)
 
     # TODO Change "MUN" to "EM3D"
     # plot_aspect_ratio()
@@ -2497,9 +2527,13 @@ if __name__ == '__main__':
     # compare_maxwell_ribbons()
     # compare_step_on_b_with_theory()
 
-    # tester.open_peter_converter()
-    # tester.add_row(sample_files.joinpath(r"Aspect ratio\Maxwell"))
-    # tester.close()
     # tester = TestRunner()
     # tester.show()
+    # tester.add_row(sample_files.joinpath(r"Two-way induction\300x100\100S\MUN"), file_type="MUN")
+    # # tester.add_row(sample_files.joinpath(r"Two-way induction\300x100\100S\Maxwell"), file_type="Maxwell")
+    # tester.test_name_edit.setText("Testing this bullshit")
+    # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+    #     r"Two-way induction\300x100\100S\MUN\MUN plotting test.PDF")))
+    # tester.print_pdf()
+
     app.exec_()

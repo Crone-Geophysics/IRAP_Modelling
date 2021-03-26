@@ -4,8 +4,8 @@ import matplotlib.ticker as ticker
 import time as tm
 import csv
 
-plt.rc('font', family='serif')
-plt.rc('text', usetex=True)
+# plt.rc('font', family='serif')
+# plt.rc('text', usetex=True)
 
 
 def spline_interpolate(x_orig, y_orig, x_intp, y=False, dy=False, integ=False,
