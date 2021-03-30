@@ -30,6 +30,10 @@ from src.file_types.mun_file import MUNFile, MUNTab
 from src.file_types.platef_file import PlateFFile, PlateFTab
 from src.file_types.tem_file import TEMFile, TEMTab
 
+log_file = r"log.txt"
+f = open(log_file, "w")
+f.close()
+
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
     application_path = Path(sys.executable).parent
@@ -903,13 +907,25 @@ class TestRunner(QMainWindow, test_runnerUI):
         df_stems = df.applymap(get_stem).to_numpy()
         unique_stems = np.unique(df_stems)
         common_stems = []
-        for stem in unique_stems:
-            if all([stem in lst for lst in df_stems.T]):
-                print(f"{stem} is in all the lists.")
-                common_stems.append(stem)
-            else:
-                print(f"{stem} is not in all the lists.")
+        # Save the name of files that aren't in being plotted
+        with open(log_file, "a+") as file:
+            opened_file_types = [self.table.item(row, self.header_labels.index("File Type")).text() for row in
+                                 range(self.table.rowCount())]
+            for stem in unique_stems:
+                if not stem:
+                    continue
 
+                if all([stem in lst for lst in df_stems.T]):
+                    print(f"{stem} is in all the lists.")
+                    common_stems.append(stem)
+                else:
+                    culprits = []  # Only used to find out which files are available for which filetypes.
+                    for ind, lst in enumerate([lst for lst in df_stems.T]):
+                        if stem not in lst:
+                            culprits.append(opened_file_types[ind])
+                    file.write(f"{stem} is not available for {', '.join(culprits)}.\n")
+                    print(f"{stem} is not in all the lists.")
+            file.write(">>Matching Complete<<\n\n")
         # Only keep filepaths whose stems are in the common_stems list
         filereted_files = []
         for lst in self.opened_files:
@@ -923,7 +939,6 @@ class TestRunner(QMainWindow, test_runnerUI):
 
     def get_plotting_info(self, file_type):
         """Return the plotting information for a file type"""
-
         # Find which row the file_type is on
         existing_filetypes = [self.table.item(row, self.header_labels.index('File Type')).text()
                               for row in range(self.table.rowCount())]
@@ -1915,95 +1930,106 @@ if __name__ == '__main__':
         tester = TestRunner()
         tester.show()
 
-        # # Maxwell
-        # maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
-        # tester.add_row(str(maxwell_dir), "Maxwell")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
+        with open(log_file, "a") as file:
+            file.write(f">>Plotting aspect ratio test results<<\n")
 
-        # MUN
-        mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
-        tester.add_row(str(mun_dir), "MUN")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-200")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+            # # Maxwell
+            # maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
+            # tester.add_row(str(maxwell_dir), "Maxwell")
+            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
+            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
+            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
 
-        # # Plate
-        # plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
-        # tester.add_row(str(plate_dir), "PLATE")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+            # MUN
+            mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
+            tester.add_row(str(mun_dir), "MUN")
+            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-200")
+            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
+            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
 
-        # Peter
-        irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
-        tester.add_row(str(irap_dir), "IRAP")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+            # # Plate
+            # plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
+            # tester.add_row(str(plate_dir), "PLATE")
+            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
 
-        """ Plotting """
-        tester.plot_profiles_rbtn.setChecked(True)
+            # Peter
+            irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
+            tester.add_row(str(irap_dir), "IRAP")
+            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
 
-        tester.custom_stations_cbox.setChecked(False)
-        tester.y_cbox.setChecked(False)
-        tester.test_name_edit.setText(r"Aspect Ratio")
-        # tester.fixed_range_cbox.setChecked(True)
-        tester.include_edit.setText("150")
-        tester.include_edit.editingFinished.emit()
+            """ Plotting """
+            tester.plot_profiles_rbtn.setChecked(True)
 
-        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate.PDF"))
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf(from_script=True)
-        # os.startfile(pdf_file)
+            tester.custom_stations_cbox.setChecked(False)
+            tester.y_cbox.setChecked(True)
+            tester.test_name_edit.setText(r"Aspect Ratio")
+            # tester.fixed_range_cbox.setChecked(True)
+            tester.include_edit.setText("150")
+            tester.include_edit.editingFinished.emit()
 
-        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF"))
-        tester.custom_stations_cbox.setChecked(True)
-        tester.station_start_sbox.setValue(0)
-        tester.station_end_sbox.setValue(200)
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf(from_script=True)
+            # file.write(f"Plotting 150m plates (linear, all stations)\n")
+            # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate.PDF"))
+            # tester.output_filepath_edit.setText(pdf_file)
+            # tester.print_pdf(from_script=True)
 
-        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate.PDF"))
-        tester.custom_stations_cbox.setChecked(False)
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.include_edit.setText("600")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf(from_script=True)
+            file.write(f"Plotting 150m plates (linear, stations 0-200)\n")
+            pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF"))
+            tester.custom_stations_cbox.setChecked(True)
+            tester.station_start_sbox.setValue(0)
+            tester.station_end_sbox.setValue(200)
+            tester.output_filepath_edit.setText(pdf_file)
+            tester.print_pdf(from_script=True)
 
-        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF"))
-        tester.custom_stations_cbox.setChecked(True)
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf(from_script=True)
+            # file.write(f"Plotting 600m plates (linear, all stations)\n")
+            # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate.PDF"))
+            # tester.custom_stations_cbox.setChecked(False)
+            # tester.output_filepath_edit.setText(pdf_file)
+            # tester.include_edit.setText("600")
+            # tester.include_edit.editingFinished.emit()
+            # tester.print_pdf(from_script=True)
 
-        """ Log Y """
-        tester.log_y_cbox.setChecked(True)
-        tester.custom_stations_cbox.setChecked(False)
+            file.write(f"Plotting 600m plates (linear, stations 0-200)\n")
+            pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF"))
+            tester.custom_stations_cbox.setChecked(True)
+            tester.output_filepath_edit.setText(pdf_file)
+            tester.print_pdf(from_script=True)
 
-        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate [LOG].PDF"))
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf(from_script=True)
+            """ Log Y """
+            tester.log_y_cbox.setChecked(True)
+            tester.custom_stations_cbox.setChecked(False)
 
-        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200) [LOG].PDF"))
-        tester.custom_stations_cbox.setChecked(True)
-        tester.station_start_sbox.setValue(0)
-        tester.station_end_sbox.setValue(200)
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf(from_script=True)
+            # file.write(f"Plotting 150m plates (log, all stations)\n")
+            # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate [LOG].PDF"))
+            # tester.output_filepath_edit.setText(pdf_file)
+            # tester.print_pdf(from_script=True)
 
-        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate [LOG].PDF"))
-        tester.custom_stations_cbox.setChecked(False)
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.include_edit.setText("600")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf(from_script=True)
+            file.write(f"Plotting 150m plates (log, stations 0-200)\n")
+            pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200) [LOG].PDF"))
+            tester.custom_stations_cbox.setChecked(True)
+            tester.station_start_sbox.setValue(0)
+            tester.station_end_sbox.setValue(200)
+            tester.output_filepath_edit.setText(pdf_file)
+            tester.print_pdf(from_script=True)
 
-        pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200) [LOG].PDF"))
-        tester.custom_stations_cbox.setChecked(True)
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf(from_script=True)
+            # file.write(f"Plotting 600m plates (log, all stations)\n")
+            # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate [LOG].PDF"))
+            # tester.custom_stations_cbox.setChecked(False)
+            # tester.output_filepath_edit.setText(pdf_file)
+            # tester.include_edit.setText("600")
+            # tester.include_edit.editingFinished.emit()
+            # tester.print_pdf(from_script=True)
 
-        print(f"Total time: {math.floor((time.time() - t) / 60):02.0f}:{(time.time() - t) % 60:2.0f}")
+            file.write(f"Plotting 600m plates (log, stations 0-200)\n")
+            pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200) [LOG].PDF"))
+            tester.custom_stations_cbox.setChecked(True)
+            tester.output_filepath_edit.setText(pdf_file)
+            tester.print_pdf(from_script=True)
+
+            print(f"Aspect ratio plot time: {math.floor((time.time() - t) / 60):02.0d}:{(time.time() - t) % 60:02.0d}")
+            file.write(f"Aspect ratio plot time: {math.floor((time.time() - t) / 60):02.0d}:{(time.time() - t) % 60:02.0d}\n")
 
     def plot_two_way_induction():
         t = time.time()
@@ -2576,7 +2602,7 @@ if __name__ == '__main__':
         #     os.startfile(output)
 
     # TODO Change "MUN" to "EM3D"
-    plot_aspect_ratio()
+    # plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
@@ -2584,8 +2610,8 @@ if __name__ == '__main__':
     # compare_maxwell_ribbons()
     # compare_step_on_b_with_theory()
 
-    # tester = TestRunner()
-    # tester.show()
+    tester = TestRunner()
+    tester.show()
     # tester.add_row(sample_files.joinpath(r"Two-way induction\300x100\100S\MUN"), file_type="MUN")
     # # tester.add_row(sample_files.joinpath(r"Two-way induction\300x100\100S\Maxwell"), file_type="Maxwell")
     # tester.test_name_edit.setText("Testing this bullshit")

@@ -275,8 +275,9 @@ class MUNFile:
 
             if ar is True:
                 """ Aspect Ratio naming """
-                conductance = re.sub(r"results_50msec_", "", str(data_folder.name))
-                conductance = re.sub(r"_set2", "", conductance).upper()
+                conductance = re.sub(r"results_50msec_", "", str(data_folder.name), flags=re.I)
+                conductance = re.sub(r"_set1", "", conductance, flags=re.IGNORECASE).upper()
+                conductance = re.sub(r"_set2", "", conductance, flags=re.IGNORECASE).upper()
                 if conductance == "100S":
                     letter = "A"
                 elif conductance == "1KS":
@@ -340,7 +341,7 @@ if __name__ == '__main__':
         t = time.time()
 
         # """Two-way induction"""
-        # base_folder = r"A:\IRAP\All_3D_data_files\Two-way induction"
+        # base_folder = r"A:\IRAP\All_3D_data_files_formatted\Two-way induction"
         # sub_folders = Path(base_folder).glob(r"*")
         # sub_folders = [s for s in sub_folders if s.is_dir() and "Model5" not in str(s)]
         # out_folder = samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN")
@@ -354,23 +355,23 @@ if __name__ == '__main__':
         #                       output_folder=out_folder,
         #                       ar=False)
 
-        """Aspect Ratio 150m"""
-        base_folder = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m"
-        sub_folders = Path(base_folder).glob(r"*")
-        sub_folders = [s for s in sub_folders if s.is_dir() and "plots" not in str(s)]
-        out_folder = samples_folder.joinpath(r"Aspect ratio\MUN")
-
-        converter = MUNFile()
-        for ind, folder in enumerate(sub_folders):
-            if "Model" in str(folder):
-                continue
-            print(f"Converting folder {ind + 1}/{len(sub_folders)}.")
-            converter.convert(folder,
-                              output_folder=out_folder,
-                              ar=True)
+        # """Aspect Ratio 150m"""
+        # base_folder = r"A:\IRAP\All_3D_data_files_formatted\Aspect Ratio\150m"
+        # sub_folders = Path(base_folder).glob(r"*")
+        # sub_folders = [s for s in sub_folders if s.is_dir() and "plots" not in str(s)]
+        # out_folder = samples_folder.joinpath(r"Aspect ratio\MUN")
+        #
+        # converter = MUNFile()
+        # for ind, folder in enumerate(sub_folders):
+        #     if "Model" in str(folder):
+        #         continue
+        #     print(f"Converting folder {ind + 1}/{len(sub_folders)}.")
+        #     converter.convert(folder,
+        #                       output_folder=out_folder,
+        #                       ar=True)
 
         """Aspect Ratio 600m"""
-        base_folder = r"A:\IRAP\All_3D_data_files\Aspect Ratio\600m"
+        base_folder = r"A:\IRAP\All_3D_data_files_formatted\Aspect Ratio\600m"
         sub_folders = Path(base_folder).glob(r"*")
         sub_folders = [s for s in sub_folders if s.is_dir() and "plots" not in str(s)]
         out_folder = samples_folder.joinpath(r"Aspect ratio\MUN")
@@ -381,7 +382,7 @@ if __name__ == '__main__':
                 continue
             print(f"Converting folder {ind + 1}/{len(sub_folders)}.")
             converter.convert(folder,
-                              primary_folder=r"A:\IRAP\All_3D_data_files\Aspect Ratio\600m\600x600m\results_50msec_100S_set2_primary",
+                              primary_folder=r"A:\IRAP\All_3D_data_files_formatted\Aspect Ratio\600m\600x600m\results_50msec_100S_set2_primary",
                               output_folder=out_folder,
                               ar=True)
 
@@ -397,8 +398,8 @@ if __name__ == '__main__':
         print(f"Parsing complete.")
 
     samples_folder = Path(__file__).parents[2].joinpath('sample_files')
-    # test_parsing(samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN"))
     convert_folders()
+    # test_parsing(samples_folder.joinpath(r"Two-way induction\300x100\100S\MUN"))
 
     # file = r"A:\IRAP\All_3D_data_files\Aspect Ratio\150m\5x150m\results_50msec_1kS_set2.DAT"
     # mun_file = parser.parse(file)
