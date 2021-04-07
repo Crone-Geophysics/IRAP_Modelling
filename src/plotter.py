@@ -8,6 +8,7 @@ import time
 import copy
 from itertools import zip_longest
 from pathlib import Path
+from cycler import cycler
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -2732,7 +2733,7 @@ if __name__ == '__main__':
                 x_ax.clear()
                 z_ax.clear()
 
-            for conductance in ["1S"]:  #, "10S"]:
+            for conductance in ["1S", "10S"]:
                 ob_file = Path(folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM")
 
                 comb_separated_file1 = Path(folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM")
@@ -2764,6 +2765,220 @@ if __name__ == '__main__':
 
         os.startfile(out_pdf)
 
+    def plot_bentplate():
+
+        def plot_maxwell(file, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.):
+            x_ax_log.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+            z_ax_log.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+
+            x_data = file.data[file.data.COMPONENT == "X"]
+            z_data = file.data[file.data.COMPONENT == "Z"]
+
+            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+            min_ch = ch_start - 1
+            max_ch = min(ch_end - 1, len(channels) - 1)
+            plotting_channels = channels[min_ch: max_ch + 1]
+
+            for ind, ch in enumerate(plotting_channels):
+                if ind == 0:
+                    label = name
+                else:
+                    label = None
+
+                x = z_data.STATION.astype(float) + station_shift
+                zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
+                xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
+
+                for ax in [x_ax, x_ax_log]:
+                    ax.plot(x, xx,
+                            color=color,
+                            linestyle="-",
+                            alpha=alpha,
+                            # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
+                            label=label,
+                            zorder=1)
+                for ax in [z_ax, z_ax_log]:
+                    ax.plot(x, zz,
+                            color=color,
+                            linestyle="-",
+                            alpha=alpha,
+                            # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
+                            label=label,
+                            zorder=1)
+
+                for ax in axes:
+                    ax.set_xlim([x.min(), x.max()])
+
+        def format_figure(title, file, min_ch, max_ch, b_field=False, incl_legend=True):
+            for legend in figure.legends:
+                legend.remove()
+
+            # Set the labels
+            z_ax.set_xlabel(f"Station")
+            z_ax_log.set_xlabel(f"Station")
+            if b_field is True:
+                for ax in axes:
+                    ax.set_ylabel(f"EM Response\n(nT)")
+            else:
+                for ax in axes:
+                    ax.set_ylabel(f"EM Response\n(nT/s)")
+            figure.suptitle(title)
+            x_ax.set_title(f"X Component")
+            z_ax.set_title(f"Z Component")
+            x_ax_log.set_title(f"X Component")
+            z_ax_log.set_title(f"Z Component")
+
+            if incl_legend is True:
+                # Create the legend
+                handles, labels = z_ax.get_legend_handles_labels()
+
+                # sort both labels and handles by labels
+                figure.legend(handles, labels)
+
+            footnote = f"Maxwell file plotting channels {min_ch}-{max_ch}" \
+                       f" ({file.ch_times[min_ch - 1]:.3f}ms-{file.ch_times[max_ch - 1]:.3f}ms).  "
+
+            # Add the footnote
+            z_ax.text(0.995, 0.01, footnote,
+                      ha='right',
+                      va='bottom',
+                      size=6,
+                      transform=figure.transFigure)
+
+        def get_residual_file(combined_file, channels):
+            """Remove the sum of the data from the individual plate files that make up a combined model from
+            the original file (combined_file)"""
+
+            def get_composite_base_files(file, base_files):
+                """Return the individual plate files that are in the target file"""
+                plates = list(file.stem)
+                composite_files = []
+                for base_file in base_files:
+                    if base_file.stem in plates:
+                        composite_files.append(base_file)
+                print(f"Individual plate files in {file.name}: {', '.join([b.name for b in composite_files])}.")
+                return composite_files
+
+            residual_file = copy.deepcopy(combined_file)
+            # residual_file = TEMFile()
+            # residual_file.parse(composite_files[0])
+
+            composite_files = get_composite_base_files(combined_file.filepath, base_files)
+            print(f"Calculating the sum of the data from {', '.join([f.name for f in composite_files])}.")
+            for file in composite_files:
+                tem_file = TEMFile()
+                tem_file.parse(file)
+                # plot_maxwell(tem_file, "g", 21, 44, station_shift=-200, data_scaling=1e-6, alpha=1., log=False)
+                # residual_file.data.loc[:, channels] = residual_file.data.loc[:, channels] + tem_file.data.loc[:, channels]
+                residual_file.data.loc[:, channels] = residual_file.data.loc[:, channels] - \
+                                                      tem_file.data.loc[:, channels]
+
+            return residual_file
+
+        folder = sample_files.joinpath(r"Bent and Multiple Plates\Maxwell")
+        files = os_sorted(list(folder.glob(r"*.TEM")))
+
+        figure, ((x_ax, x_ax_log), (z_ax, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='col', sharey='col')
+        axes = [x_ax, z_ax, x_ax_log, z_ax_log]
+        figure.set_size_inches((11 * 1.33, 8.5 * 1.33))
+        rainbow_colors = cm.rainbow(np.linspace(0, 1, (44 - 21) + 1))
+
+        """ Plot all plates"""
+        out_pdf = folder.joinpath(r"Multiple and bent plate models.PDF")
+        with PdfPages(out_pdf) as pdf:
+            count = 0
+            print(f"Plotting all plates")
+            for file in files:
+                x_ax.set_prop_cycle(cycler('color', rainbow_colors))
+                z_ax.set_prop_cycle(cycler('color', rainbow_colors))
+                print(f"Plotting {file.name} ({count + 1}/{len(files)})")
+
+                tem_file = TEMFile()
+                tem_file.parse(file)
+
+                plot_maxwell(tem_file, "b", 21, 44, file.name, station_shift=-200, data_scaling=1e-6)
+
+                name = "Multiple and Bent Plate Models\n" + ' + '.join(list(file.stem))
+                format_figure(name, tem_file, 21, 44, b_field=False, incl_legend=False)
+
+                pdf.savefig(figure, orientation='portrait')
+                for ax in axes:
+                    ax.clear()
+
+                count += 1
+
+            os.startfile(out_pdf)
+
+        """ Plot residuals """
+        out_pdf = folder.joinpath(r"Multiple and bent plate models - residual calculation.PDF")
+        with PdfPages(out_pdf) as pdf:
+            count = 0
+            print(f"Plotting plate residuals")
+
+            base_files = [f for f in files if len(f.stem) == 1]
+            combined_files = [f for f in files if len(f.stem) > 1]
+
+            channels = [f"CH{num}" for num in range(21, 45)]
+            # Plot all plates with log scale
+            for file in combined_files:
+                x_ax.set_prop_cycle(cycler('color', rainbow_colors))
+                z_ax.set_prop_cycle(cycler('color', rainbow_colors))
+
+                print(f"Plotting combined file: {file.name} ({count + 1}/{len(combined_files)}).")
+                tem_file = TEMFile()
+                tem_file.parse(file)
+
+                residual_file = get_residual_file(tem_file, channels)  # Residual
+
+                # plot_maxwell(tem_file, "b", 21, 44, "Combined File", station_shift=-200, data_scaling=1e-6, alpha=1.)
+                plot_maxwell(residual_file, "r", 21, 44, "Residual", station_shift=-200, data_scaling=1e-6, alpha=0.6)
+
+                name = "Multiple and Bent Plate Models\n" + ' + '.join(list(file.stem)) + "\nResidual Calculation"
+                format_figure(name, tem_file, 21, 44, b_field=False, incl_legend=False)
+
+                pdf.savefig(figure, orientation='landscape')
+                for ax in axes:
+                    ax.clear()
+
+                count += 1
+
+            os.startfile(out_pdf)
+
+        """ Plot all combined plates with residuals """
+        out_pdf = folder.joinpath(r"Multiple and bent plate models - residual calculation with plates.PDF")
+        with PdfPages(out_pdf) as pdf:
+            count = 0
+            print(f"Plotting plate residuals")
+
+            base_files = [f for f in files if len(f.stem) == 1]
+            combined_files = [f for f in files if len(f.stem) > 1]
+
+            channels = [f"CH{num}" for num in range(21, 45)]
+            # Plot all plates with log scale
+            for file in combined_files:
+                x_ax.set_prop_cycle(cycler('color', rainbow_colors))
+                z_ax.set_prop_cycle(cycler('color', rainbow_colors))
+
+                print(f"Plotting combined file: {file.name} ({count + 1}/{len(combined_files)}).")
+                tem_file = TEMFile()
+                tem_file.parse(file)
+
+                residual_file = get_residual_file(tem_file, channels)  # Residual
+
+                plot_maxwell(tem_file, "b", 21, 44, "Combined Plate File", station_shift=-200, data_scaling=1e-6, alpha=1.)
+                plot_maxwell(residual_file, "r", 21, 44, "Residual", station_shift=-200, data_scaling=1e-6, alpha=0.6)
+
+                name = "Multiple and Bent Plate Models\n" + ' + '.join(list(file.stem)) + "\nResidual + Plates"
+                format_figure(name, tem_file, 21, 44, b_field=False, incl_legend=True)
+
+                pdf.savefig(figure, orientation='landscape')
+                for ax in axes:
+                    ax.clear()
+
+                count += 1
+
+            os.startfile(out_pdf)
+
     # TODO Change "MUN" to "EM3D"
     # plot_aspect_ratio()
     # plot_two_way_induction()
@@ -2772,7 +2987,8 @@ if __name__ == '__main__':
     # tabulate_run_on_convergence()
     # compare_maxwell_ribbons()
     # compare_step_on_b_with_theory()
-    plot_overburden()
+    # plot_overburden()
+    plot_bentplate()
 
     # tester = TestRunner()
     # tester.show()
