@@ -5,6 +5,7 @@ import pickle
 import re
 import sys
 import time
+import copy
 from itertools import zip_longest
 from pathlib import Path
 
@@ -2601,6 +2602,168 @@ if __name__ == '__main__':
         #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=True)
         #     os.startfile(output)
 
+    def plot_overburden():
+        figure, (x_ax, z_ax) = plt.subplots(nrows=2, sharex='all')
+        figure.set_size_inches((8.5, 11))
+
+        def plot_maxwell(file, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.):
+
+            x_data = file.data[file.data.COMPONENT == "X"]
+            z_data = file.data[file.data.COMPONENT == "Z"]
+
+            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+            min_ch = ch_start - 1
+            max_ch = min(ch_end - 1, len(channels) - 1)
+            plotting_channels = channels[min_ch: max_ch + 1]
+
+            for ind, ch in enumerate(plotting_channels):
+                if ind == 0:
+                    label = f"{name}"
+                else:
+                    label = None
+
+                x = z_data.STATION.astype(float) + station_shift
+                zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
+                xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
+
+                x_ax.plot(x, xx,
+                          color=color,
+                          linestyle="-",
+                          alpha=alpha,
+                          # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
+                          label=label,
+                          zorder=1)
+                z_ax.plot(x, zz,
+                          color=color,
+                          linestyle="-",
+                          alpha=alpha,
+                          # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
+                          label=label,
+                          zorder=1)
+
+                x_ax.set_xlim([x.min(), x.max()])
+                z_ax.set_xlim([x.min(), x.max()])
+
+        def calc_response(ob_file, plate_file):
+            ob_tem = TEMFile()
+            ob_tem.parse(ob_file)
+
+            plate_tem = TEMFile()
+            plate_tem.parse(plate_file)
+
+            channels = [f'CH{num}' for num in range(1, len(ob_tem.ch_times) + 1)]
+            response = ob_tem.data.loc[:, channels] + plate_tem.data.loc[:, channels]
+
+            calculated_file = copy.deepcopy(ob_tem)
+            calculated_file.data.loc[:, channels] = response
+            return calculated_file
+
+        def format_figure(title, file, min_ch, max_ch, b_field=False, incl_legend=True):
+            for legend in figure.legends:
+                legend.remove()
+
+            # Set the labels
+            z_ax.set_xlabel(f"Station")
+            if b_field is True:
+                x_ax.set_ylabel(f"EM Response\n(nT)")
+                z_ax.set_ylabel(f"EM Response\n(nT)")
+            else:
+                x_ax.set_ylabel(f"EM Response\n(nT/s)")
+                z_ax.set_ylabel(f"EM Response\n(nT/s)")
+            figure.suptitle(title)
+            x_ax.set_title(f"X Component")
+            z_ax.set_title(f"Z Component")
+
+            if incl_legend is True:
+                # Create the legend
+                handles, labels = z_ax.get_legend_handles_labels()
+
+                # sort both labels and handles by labels
+                figure.legend(handles, labels)
+
+            footnote = f"Maxwell file plotting channels {min_ch}-{max_ch}" \
+                f" ({file.ch_times[min_ch - 1]:.3f}ms-{file.ch_times[max_ch - 1]:.3f}ms).  "
+
+            # Add the footnote
+            z_ax.text(0.995, 0.01, footnote,
+                      ha='right',
+                      va='bottom',
+                      size=6,
+                      transform=figure.transFigure)
+
+        def plot_comparison(combined_model_filepath, calculated_file, title='', log=False):
+            if log:
+                x_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+                z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+
+            combined_file = TEMFile()
+            combined_file.parse(combined_model_filepath)
+
+            min_ch, max_ch = 21, 44
+
+            # Plot the files
+            plot_maxwell(combined_file, "b", min_ch, max_ch, name=f"Modelled",
+                         station_shift=0,
+                         data_scaling=1e-6)
+            plot_maxwell(calculated_file, "r", min_ch, max_ch, name=f"Calculated",
+                         station_shift=0,
+                         data_scaling=1e-6)
+            format_figure(title, combined_file, min_ch, max_ch, b_field=False, incl_legend=True)
+
+            pdf.savefig(figure, orientation='portrait')
+
+            x_ax.clear()
+            z_ax.clear()
+
+        folder = Path(r"C:\Users\Eric\PycharmProjects\IRAP_Modelling\sample_files\Overburden\Overburden+Conductor Revised")
+        out_pdf = folder.joinpath(r"1m vs contact.PDF")
+        with PdfPages(out_pdf) as pdf:
+
+            plate1_file = Path(folder).joinpath(r"Plate #1 Only - 51m.TEM")
+            plate2_file = Path(folder).joinpath(r"Plate #2 Only - 51m.TEM")
+
+            # Plot the plate models on their own
+            for filepath, title in zip([plate1_file, plate2_file], ["Plate 1 Only", "Plate 2 Only"]):
+                file_object = TEMFile()
+                file_object.parse(filepath)
+                plot_maxwell(file_object, "b", 21, 44, data_scaling=1e-6)
+                format_figure(title, file_object, 21, 44, b_field=False, incl_legend=False)
+                pdf.savefig(figure, orientation='portrait')
+                x_ax.clear()
+                z_ax.clear()
+
+            for conductance in ["1S"]:  #, "10S"]:
+                ob_file = Path(folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM")
+
+                comb_separated_file1 = Path(folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM")
+                comb_separated_file2 = Path(folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM")
+                comb_contact_file1 = Path(folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM")
+                comb_contact_file2 = Path(folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM")
+
+                plate_1_calculated = calc_response(ob_file, plate1_file)
+                plate_2_calculated = calc_response(ob_file, plate2_file)
+
+                # Plot the overburden on its own
+                file_object = TEMFile()
+                file_object.parse(ob_file)
+                plot_maxwell(file_object, "b", 21, 44, data_scaling=1e-6)
+                format_figure(f"{conductance} Overburden Only", file_object, 21, 44, b_field=False, incl_legend=False)
+                pdf.savefig(figure, orientation='portrait')
+                x_ax.clear()
+                z_ax.clear()
+
+                plot_comparison(comb_separated_file1, plate_1_calculated, title=f"{conductance} Overburden + Plate 1 (1m Spacing)", log=False)
+                plot_comparison(comb_separated_file1, plate_1_calculated, title=f"{conductance} Overburden + Plate 1 (1m Spacing)", log=True)
+                plot_comparison(comb_separated_file2, plate_2_calculated, title=f"{conductance} Overburden + Plate 2 (1m Spacing)", log=False)
+                plot_comparison(comb_separated_file2, plate_2_calculated, title=f"{conductance} Overburden + Plate 2 (1m Spacing)", log=True)
+
+                plot_comparison(comb_contact_file1, plate_1_calculated, title=f"{conductance} Overburden + Plate 1 (Contact)", log=False)
+                plot_comparison(comb_contact_file1, plate_1_calculated, title=f"{conductance} Overburden + Plate 1 (Contact)", log=True)
+                plot_comparison(comb_contact_file2, plate_2_calculated, title=f"{conductance} Overburden + Plate 2 (Contact)", log=False)
+                plot_comparison(comb_contact_file2, plate_2_calculated, title=f"{conductance} Overburden + Plate 2 (Contact)", log=True)
+
+        os.startfile(out_pdf)
+
     # TODO Change "MUN" to "EM3D"
     # plot_aspect_ratio()
     # plot_two_way_induction()
@@ -2609,9 +2772,10 @@ if __name__ == '__main__':
     # tabulate_run_on_convergence()
     # compare_maxwell_ribbons()
     # compare_step_on_b_with_theory()
+    plot_overburden()
 
-    tester = TestRunner()
-    tester.show()
+    # tester = TestRunner()
+    # tester.show()
     # tester.add_row(sample_files.joinpath(r"Two-way induction\300x100\100S\MUN"), file_type="MUN")
     # # tester.add_row(sample_files.joinpath(r"Two-way induction\300x100\100S\Maxwell"), file_type="Maxwell")
     # tester.test_name_edit.setText("Testing this bullshit")
