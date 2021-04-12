@@ -1,0 +1,9 @@
+thickness of overburden prism = 5 m.
+conductivity of overburden prism = 
+  10S / 5m = 2 S/m.
+  1 / 5 = 0.2 S/m.
+  
+
+thickness of lower plates/prisms (below) is always 1 m.
+  plate/prism #1: 250 m x 250 m, conductivity 100 S.
+  plate/prism #2: 50 m x 50 m, conductivity 1000 S.

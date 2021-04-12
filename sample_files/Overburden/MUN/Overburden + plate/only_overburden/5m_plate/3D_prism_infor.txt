@@ -1,0 +1,4 @@
+thickness of prism = 5 m.
+conductivity of prism = 
+  10 / 5 = 2 S/m.
+  1 / 5 = 0.2 S/m.
