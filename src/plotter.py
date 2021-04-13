@@ -1930,8 +1930,16 @@ if __name__ == '__main__':
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
     # tem_file = sample_files.joinpath(r'Aspect ratio\Maxwell\5x150A.TEM')
 
-    def plot_maxwell(axes, file, color, ch_start, ch_end, ch_step=1, name="", station_shift=0,
-                     data_scaling=1., alpha=1., line_style='-'):
+    def plot_maxwell(axes, file, color, ch_start, ch_end, ch_step=1, name="", station_shift=0, single_file=False,
+                     data_scaling=1., alpha=1., line_style='-', x_min=None, x_max=None, y_min=None, y_max=None):
+
+        x_ax, z_ax, x_ax_log, z_ax_log = axes
+        rainbow_colors = cm.gist_rainbow(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
+        x_ax.set_prop_cycle(cycler('color', rainbow_colors))
+        x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+        z_ax.set_prop_cycle(cycler('color', rainbow_colors))
+        z_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+
         x_data = file.data[file.data.COMPONENT == "X"]
         z_data = file.data[file.data.COMPONENT == "Z"]
 
@@ -1941,16 +1949,21 @@ if __name__ == '__main__':
         plotting_channels = channels[min_ch: max_ch + 1: ch_step]
 
         for ind, ch in enumerate(plotting_channels):
-            if ind == 0:
-                label = name
+            if single_file is True:
+                # label = f"{file.ch_times[min_ch + ind]:.3f} ms"
+                label = ch
+                color = None
             else:
-                label = None
+                if ind == 0:
+                    label = name
+                else:
+                    label = None
 
             x = z_data.STATION.astype(float) + station_shift
-            zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
-            xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
+            zz = z_data.loc[:, ch].astype(float) * data_scaling
+            xx = x_data.loc[:, ch].astype(float) * data_scaling
 
-            for ax in [axes[0], axes[2]]:
+            for ax in [x_ax, x_ax_log]:
                 ax.plot(x, xx,
                         color=color,
                         alpha=alpha,
@@ -1958,7 +1971,7 @@ if __name__ == '__main__':
                         label=label,
                         ls=line_style,
                         zorder=1)
-            for ax in [axes[1], axes[3]]:
+            for ax in [z_ax, z_ax_log]:
                 ax.plot(x, zz,
                         color=color,
                         alpha=alpha,
@@ -1968,10 +1981,22 @@ if __name__ == '__main__':
                         zorder=1)
 
             for ax in axes:
-                ax.set_xlim([x.min(), x.max()])
+                if x_min and x_max:
+                    ax.set_xlim([x_min, x_max])
+                else:
+                    ax.set_xlim([x.min(), x.max()])
+                if y_min and y_max:
+                    ax.set_ylim([y_min, y_max])
 
     def plot_mun(axes, file, color, ch_start, ch_end, ch_step=1, name="", station_shift=0, data_scaling=1., alpha=1.,
-                 line_style='-'):
+                 line_style='-', x_min=None, x_max=None, y_min=None, y_max=None, single_file=False):
+        x_ax, z_ax, x_ax_log, z_ax_log = axes
+        rainbow_colors = cm.rainbow(np.linspace(0, ch_step, (ch_start - ch_end) + 1))
+        x_ax.set_prop_cycle(cycler('color', rainbow_colors))
+        x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+        z_ax.set_prop_cycle(cycler('color', rainbow_colors))
+        z_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+
         x_data = file.data[file.data.Component == "X"]
         z_data = file.data[file.data.Component == "Z"]
 
@@ -1981,16 +2006,20 @@ if __name__ == '__main__':
         plotting_channels = channels[min_ch: max_ch + 1: ch_step]
 
         for ind, ch in enumerate(plotting_channels):
-            if ind == 0:
-                label = name
+            if single_file is True:
+                label = ch
+                color = None
             else:
-                label = None
+                if ind == 0:
+                    label = name
+                else:
+                    label = None
 
             x = z_data.Station.astype(float) + station_shift
             zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
             xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
 
-            for ax in [axes[0], axes[2]]:
+            for ax in [x_ax, x_ax_log]:
                 ax.plot(x, xx,
                         color=color,
                         alpha=alpha,
@@ -1998,7 +2027,7 @@ if __name__ == '__main__':
                         label=label,
                         ls=line_style,
                         zorder=1)
-            for ax in [axes[1], axes[3]]:
+            for ax in [z_ax, z_ax_log]:
                 ax.plot(x, zz,
                         color=color,
                         alpha=alpha,
@@ -2008,13 +2037,18 @@ if __name__ == '__main__':
                         zorder=1)
 
             for ax in axes:
-                ax.set_xlim([x.min(), x.max()])
+                if x_min and x_max:
+                    ax.set_xlim([x_min, x_max])
+                else:
+                    ax.set_xlim([x.min(), x.max()])
+                if y_min and y_max:
+                    ax.set_ylim([y_min, y_max])
 
     def format_figure(figure, title, files, min_ch, max_ch, b_field=False, incl_legend=True):
         for legend in figure.legends:
             legend.remove()
 
-        x_ax, z_ax, x_ax_log, z_ax_log = figure.axes
+        x_ax, x_ax_log, z_ax, z_ax_log = figure.axes
         # Set the labels
         z_ax.set_xlabel(f"Station")
         z_ax_log.set_xlabel(f"Station")
@@ -2058,6 +2092,28 @@ if __name__ == '__main__':
             return "IRAP"
         elif isinstance(file_object, PlateFFile):
             return "PLATE"
+
+    def get_folder_range(folder, file_type, start_ch, end_ch):
+        """Calculates the Max and Min Y values from all files in the folder"""
+        print(F"Calculating maximum and minimum Y values in {folder} between channels {start_ch} and {end_ch}.")
+        mins, maxes = [], []
+        if file_type == "Maxwell":
+            files = folder.glob("*.TEM")
+            for file in files:
+                tem_file = TEMFile().parse(file)
+                mn, mx = tem_file.get_range(start_ch=start_ch, end_ch=end_ch)
+                mins.append(mn)
+                maxes.append(mx)
+        elif file_type == "MUN":
+            files = folder.glob("*.DAT")
+            maxes, mins = [], []
+            for file in files:
+                tem_file = TEMFile().parse(file)
+                mn, mx = tem_file.get_range(start_ch=start_ch, end_ch=end_ch)
+                mins.append(mn)
+                maxes.append(mx)
+        print(F"Minimum Y: {min(mins):.2f}\nMaximum Y: {max(maxes):.2f}.")
+        return min(mins), max(maxes)
 
     def clear_axes(axes):
         for ax in axes:
@@ -2790,6 +2846,20 @@ if __name__ == '__main__':
 
         def plot_overburden(ch_step=1):
             """ Plot the overburden on its own """
+
+            """Plot plates and overburdens only"""
+            out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Plates & Overburden Only.PDF")
+            with PdfPages(out_pdf) as pdf:
+                # Plot the plate models on their own
+                plot_plates(ch_step=channel_step)
+
+                for conductance in ["1S", "10S"]:
+                    maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
+                    mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
+
+                    plot_overburden(ch_step=channel_step)
+            os.startfile(out_pdf)
+
             print(f">> Plotting overburden alone ({conductance})")
             plot_maxwell(axes, maxwell_ob_file, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step,  name="Maxwell", data_scaling=1e-6)
             plot_mun(axes, mun_ob_file, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", alpha=0.9)
@@ -3077,25 +3147,14 @@ if __name__ == '__main__':
         assert mun_folder.is_dir(), f"{mun_folder} is not a directory."
 
         min_ch, max_ch = 21, 44
-        channel_step = 2
+        channel_step = 1
 
         maxwell_plate1_file = TEMFile().parse(Path(maxwell_folder).joinpath(r"Plate #1 Only - 51m.TEM"))
         maxwell_plate2_file = TEMFile().parse(Path(maxwell_folder).joinpath(r"Plate #2 Only - 51m.TEM"))
         mun_plate1_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate250_dBdt.DAT"))
         mun_plate2_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate50_dBdt.DAT"))
 
-        # """Plot plates and overburdens only"""
-        # out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Plates & Overburden Only.PDF")
-        # with PdfPages(out_pdf) as pdf:
-        #     # Plot the plate models on their own
-        #     plot_plates(ch_step=channel_step)
-        #
-        #     for conductance in ["1S", "10S"]:
-        #         maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
-        #         mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
-        #
-        #         plot_overburden(ch_step=channel_step)
-        # os.startfile(out_pdf)
+        plot_overburden(ch_step=channel_step)
         #
         # """Effects of plate contact"""
         # out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Effects of Plate Contact.PDF")
@@ -3254,7 +3313,80 @@ if __name__ == '__main__':
 
     def plot_bentplate():
 
-        def get_residual_file(combined_file, channels):
+        def plot_individual_plates(fixed_y=False):
+            """ Plot individual plates"""
+            out_pdf = folder_100S.joinpath(r"Multiple and Bent Plate Models - Individual Plates.PDF")
+            if fixed_y is True:
+                y_min, y_max = mn, mx
+            else:
+                y_max, y_min = None, None
+
+            with PdfPages(out_pdf) as pdf:
+                with open(log_file, "a") as logging_file:
+                    logging_file.write(f">>Plotting Multiple and Bent Plates - Individual Plots<<\n")
+                    count = 0
+                    print(f">>Plotting individual plates")
+                    for model in single_plot_order:
+                        print(f"Searching for {model}.TEM")
+                        file = folder_100S.joinpath(model).with_suffix(".TEM")
+                        if not file.is_file():
+                            print(F"{file.name} not found ({count + 1}/{len(single_plot_order)}).")
+                            logging_file.write(F"{file.name} not found.\n")
+                            count += 1
+                            continue
+
+                        print(f"Plotting {file.name} ({count + 1}/{len(single_plot_order)})")
+
+                        tem_file = TEMFile().parse(file)
+                        log_scale(x_ax_log, z_ax_log)
+                        plot_maxwell(axes, tem_file, colors.get("Maxwell"), min_ch, max_ch, ch_step=channel_step, name=file.name,
+                                     station_shift=-200, data_scaling=1e-6, y_min=y_min, y_max=y_max, single_file=True)
+
+                        name = "Multiple and Bent Plate Models\n" + model
+                        format_figure(figure, name, [tem_file], min_ch, max_ch, b_field=False, incl_legend=True)
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        count += 1
+                    os.startfile(out_pdf)
+
+        def plot_combined_plates(fixed_y=False):
+            """ Plot combined plates"""
+            out_pdf = folder_100S.joinpath(r"Multiple and Bent Plate Models - Combined Plates.PDF")
+            if fixed_y is True:
+                y_min, y_max = mn, mx
+            else:
+                y_max, y_min = None, None
+
+            with PdfPages(out_pdf) as pdf:
+                with open(log_file, "a") as logging_file:
+                    logging_file.write(f">>Plotting Multiple and Bent Plates - Combined Plots<<\n")
+                    count = 0
+                    print(f">>Plotting combined plates")
+                    for model in combined_plot_order:
+                        print(f"Searching for {model}.TEM")
+                        file = folder_100S.joinpath(model).with_suffix(".TEM")
+                        if not file.is_file():
+                            print(F"{file.name} not found ({count + 1}/{len(combined_plot_order)}).")
+                            logging_file.write(F"{file.name} not found.\n")
+                            count += 1
+                            continue
+
+                        print(f"Plotting {file.name} ({count + 1}/{len(combined_plot_order)})")
+
+                        tem_file = TEMFile().parse(file)
+                        log_scale(x_ax_log, z_ax_log)
+                        plot_maxwell(axes, tem_file, colors.get("Maxwell"), min_ch, max_ch, ch_step=channel_step,
+                                     name=file.name, station_shift=-200, data_scaling=1e-6, y_min=y_min, y_max=y_max,
+                                     single_file=True)
+
+                        name = "Multiple and Bent Plate Models\n" + model
+                        format_figure(figure, name, [tem_file], min_ch, max_ch, b_field=False, incl_legend=True)
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        count += 1
+                    os.startfile(out_pdf)
+
+        def get_residual_file(combined_file):
             """Remove the sum of the data from the individual plate files that make up a combined model from
             the original file (combined_file)"""
 
@@ -3263,34 +3395,144 @@ if __name__ == '__main__':
                 plates = list(file.stem)
                 composite_files = []
                 for base_file in base_files:
-                    if base_file.stem in plates:
-                        composite_files.append(base_file)
+                    if base_file in plates:
+                        composite_files.append(folder_100S.joinpath(base_file).with_suffix(".TEM"))
                 print(f"Individual plate files in {file.name}: {', '.join([b.name for b in composite_files])}.")
                 return composite_files
 
+            base_files = [f for f in single_plot_order if len(f) == 1]
+            channels = [f"CH{num}" for num in range(1, len(combined_file.ch_times) + 1)]
             residual_file = copy.deepcopy(combined_file)
-            # residual_file = TEMFile()
-            # residual_file.parse(composite_files[0])
 
             composite_files = get_composite_base_files(combined_file.filepath, base_files)
             print(f"Calculating the sum of the data from {', '.join([f.name for f in composite_files])}.")
             for file in composite_files:
-                tem_file = TEMFile()
-                tem_file.parse(file)
-                # plot_maxwell(tem_file, "g", 21, 44, station_shift=-200, data_scaling=1e-6, alpha=1., log=False)
-                # residual_file.data.loc[:, channels] = residual_file.data.loc[:, channels] + tem_file.data.loc[:, channels]
+                tem_file = TEMFile().parse(file)
                 residual_file.data.loc[:, channels] = residual_file.data.loc[:, channels] - \
                                                       tem_file.data.loc[:, channels]
 
             return residual_file
 
-        folder = sample_files.joinpath(r"Bent and Multiple Plates\Maxwell\Revised\100S Plates")
-        files = os_sorted(list(folder.glob(r"*.TEM")))
+        def plot_residual(with_plates=False, fixed_y=False):
+            """ Plot residuals """
+            pdf_name = "Multiple and Bent Plate Models - Residual Calculation"
+            if with_plates is True:
+                pdf_name = pdf_name + " with Plates"
 
+            if fixed_y is True:
+                y_min, y_max = mn, mx
+            else:
+                y_max, y_min = None, None
+            out_pdf = folder_100S.joinpath(pdf_name + ".PDF")
+            with PdfPages(out_pdf) as pdf:
+                with open(log_file, "a") as logging_file:
+                    logging_file.write(f">>Plotting Multiple and Bent Plates - Residual Calculation<<\n")
+                    count = 0
+                    print(f">>Plotting plate residuals")
+
+                    combined_files = [f for f in combined_plot_order if len(f) > 1]
+
+                    for model in combined_files:
+                        log_scale(x_ax_log, z_ax_log)
+
+                        print(f"Searching for {model}.TEM")
+                        file = folder_100S.joinpath(model).with_suffix(".TEM")
+                        if not file.is_file():
+                            print(F"{file.name} not found ({count + 1}/{len(combined_files)}).")
+                            logging_file.write(F"{file.name} not found.\n")
+                            count += 1
+                            continue
+
+                        print(f"Plotting combined file: {file.name} ({count + 1}/{len(combined_files)}).")
+                        combined_file = TEMFile().parse(file)
+
+                        residual_file = get_residual_file(combined_file)  # Residual
+
+                        if with_plates is True:
+                            plot_maxwell(axes, combined_file, colors.get("Maxwell"), min_ch, max_ch,
+                                         ch_step=channel_step, name="Model Response", station_shift=-200,
+                                         data_scaling=1e-6, alpha=1., y_min=y_min, y_max=y_max, single_file=False,
+                                         line_style='-')
+                        plot_maxwell(axes, residual_file, "r", min_ch, max_ch, ch_step=channel_step, name="Residual",
+                                     station_shift=-200, data_scaling=1e-6, alpha=1., y_min=y_min, y_max=y_max,
+                                     single_file=not with_plates)
+
+                        name = "Multiple and Bent Plate Models\n" + model + " Residual Calculation"
+                        format_figure(figure, name, [combined_file], min_ch, max_ch, b_field=False,
+                                      incl_legend=True)
+
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        count += 1
+
+                    os.startfile(out_pdf)
+
+        def plot_varying_conductances(fixed_y=False):
+            """ Plot various conductances """
+            models = {
+                "1@10S": "1",
+                "1@1000S": "1",
+                "4@1000S": "4",
+                "1@10S_4@100S": "1_4",
+                "1@10S_4@1000S": "1_4",
+                "1@100S_4@1000S": "1_4",
+                "1@10S+4@100S": "1_4",
+                "1@10S+4@1000S": "1_4",
+                "1@100S+4@1000S": "1_4",
+                "1@10S_2@100S": "1_2",
+                "1@10S+2@100S": "1+2",
+            }
+
+            out_pdf = folder_varying.joinpath(r"Multiple and Bent Plate Models - Various Conductances.PDF")
+            if fixed_y is True:
+                y_min, y_max = mn, mx
+            else:
+                y_max, y_min = None, None
+
+            with PdfPages(out_pdf) as pdf:
+                with open(log_file, "a") as logging_file:
+                    logging_file.write(f">>Plotting Multiple and Bent Plates - Combined Plots<<\n")
+                    count = 0
+                    print(f">>Plotting combined plates")
+                    for model in models.keys():
+                        print(f"Searching for {model}.TEM")
+                        file = folder_varying.joinpath(model).with_suffix(".TEM")
+                        if not file.is_file():
+                            print(F"{file.name} not found ({count + 1}/{len(models)}).")
+                            logging_file.write(F"{file.name} not found.\n")
+                            count += 1
+                            continue
+
+                        print(f"Plotting {file.name} ({count + 1}/{len(models)})")
+
+                        tem_file = TEMFile().parse(file)
+                        log_scale(x_ax_log, z_ax_log)
+                        plot_maxwell(axes, tem_file, colors.get("Maxwell"), min_ch, max_ch, ch_step=channel_step,
+                                     single_file=True, name=file.name, station_shift=-200, data_scaling=1e-6, alpha=1.,
+                                     x_min=-200, x_max=400, y_min=y_min, y_max=y_max)
+
+                        # pair_file = folder_100S.joinpath(models.get(model)).with_suffix(".TEM")
+                        # if not pair_file.is_file():
+                        #     print(f"Could not find {pair_file.name}.")
+                        #     logging_file.write(f"Could not find {pair_file.name}.\n")
+                        # else:
+                        #     pair_tem = TEMFile().parse(pair_file)
+                        #     plot_maxwell(axes, pair_tem, "#cf0029", min_ch, max_ch, ch_step=channel_step, line_style='-',
+                        #                  name=pair_file.name, station_shift=-200, data_scaling=1e-6,
+                        #                  x_min=-200, x_max=400, y_min=y_min, y_max=y_max, alpha=0.9)
+
+                        name = "Multiple and Bent Plate Models\n" + model
+                        format_figure(figure, name, [tem_file], min_ch, max_ch, b_field=False, incl_legend=True)
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        count += 1
+                    os.startfile(out_pdf)
+
+        folder_100S = sample_files.joinpath(r"Bent and Multiple Plates\Maxwell\Revised\100S Plates")
+        folder_varying = sample_files.joinpath(r"Bent and Multiple Plates\Maxwell\Revised\Various Conductances")
         figure, ((x_ax, x_ax_log), (z_ax, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='col', sharey='col')
         axes = [x_ax, z_ax, x_ax_log, z_ax_log]
         figure.set_size_inches((11 * 1.33, 8.5 * 1.33))
-        rainbow_colors = cm.rainbow(np.linspace(0, 1, (44 - 21) + 1))
         min_ch, max_ch = 21, 44
         channel_step = 1
 
@@ -3335,107 +3577,18 @@ if __name__ == '__main__':
             "(1+4+5)_(3+6)",
             ]
 
-        """ Plot individual plates"""
-        out_pdf = folder.joinpath(r"Multiple and Bent Plate Models - Individual Plates.PDF")
-        with PdfPages(out_pdf) as pdf:
-            count = 0
-            print(f">>Plotting individual plates")
-            for stem in single_plot_order:
-                # x_ax.set_prop_cycle(cycler('color', rainbow_colors))
-                # z_ax.set_prop_cycle(cycler('color', rainbow_colors))
-                print(f"Searching for {stem}.TEM")
-                file = folder.joinpath(stem).with_suffix(".TEM")
-                if not file.is_file():
-                    print(F"{file.name} not found.")
-                    count += 1
-                    continue
+        mn, mx = get_folder_range(folder_100S, "Maxwell", start_ch=min_ch, end_ch=max_ch)
+        mn, mx = mn * 1e-6, mx * 1e-6
+        # plot_individual_plates(fixed_y=False)
+        # plot_combined_plates(fixed_y=False)
+        plot_residual(with_plates=False, fixed_y=False)
+        # plot_residual(with_plates=True, fixed_y=True)
 
-                print(f"Plotting {file.name} ({count + 1}/{len(single_plot_order)})")
+        # Varying conductances
+        # mn, mx = get_folder_range(folder_varying, "Maxwell", start_ch=min_ch, end_ch=max_ch)
+        # mn, mx = mn * 1e-6, mx * 1e-6
+        # plot_varying_conductances(fixed_y=False)
 
-                tem_file = TEMFile().parse(file)
-                log_scale(x_ax_log, z_ax_log)
-                plot_maxwell(axes, tem_file, colors.get("Maxwell"), min_ch, max_ch, ch_step=channel_step, name=file.name,
-                             station_shift=-200, data_scaling=1e-6)
-
-                name = "Multiple and Bent Plate Models\n" + ' + '.join(list(file.stem))
-                format_figure(figure, name, tem_file, min_ch, max_ch, b_field=False, incl_legend=False)
-
-                pdf.savefig(figure, orientation='landscape')
-                clear_axes(axes)
-
-                count += 1
-
-            os.startfile(out_pdf)
-
-        # """ Plot residuals """
-        # out_pdf = folder.joinpath(r"Multiple and bent plate models - residual calculation.PDF")
-        # with PdfPages(out_pdf) as pdf:
-        #     count = 0
-        #     print(f"Plotting plate residuals")
-        #
-        #     base_files = [f for f in files if len(f.stem) == 1]
-        #     combined_files = [f for f in files if len(f.stem) > 1]
-        #
-        #     channels = [f"CH{num}" for num in range(21, 45)]
-        #     # Plot all plates with log scale
-        #     for file in combined_files:
-        #         x_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        #         z_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        #
-        #         print(f"Plotting combined file: {file.name} ({count + 1}/{len(combined_files)}).")
-        #         tem_file = TEMFile()
-        #         tem_file.parse(file)
-        #
-        #         residual_file = get_residual_file(tem_file, channels)  # Residual
-        #
-        #         # plot_maxwell(tem_file, "b", 21, 44, "Combined File", station_shift=-200, data_scaling=1e-6, alpha=1.)
-        #         plot_maxwell(residual_file, "r", 21, 44, "Residual", station_shift=-200, data_scaling=1e-6, alpha=0.6)
-        #
-        #         name = "Multiple and Bent Plate Models\n" + ' + '.join(list(file.stem)) + "\nResidual Calculation"
-        #         format_figure(name, tem_file, 21, 44, b_field=False, incl_legend=False)
-        #
-        #         pdf.savefig(figure, orientation='landscape')
-        #         for ax in axes:
-        #             ax.clear()
-        #
-        #         count += 1
-        #
-        #     os.startfile(out_pdf)
-        #
-        # """ Plot all combined plates with residuals """
-        # out_pdf = folder.joinpath(r"Multiple and bent plate models - residual calculation with plates.PDF")
-        # with PdfPages(out_pdf) as pdf:
-        #     count = 0
-        #     print(f"Plotting plate residuals")
-        #
-        #     base_files = [f for f in files if len(f.stem) == 1]
-        #     combined_files = [f for f in files if len(f.stem) > 1]
-        #
-        #     channels = [f"CH{num}" for num in range(21, 45)]
-        #     # Plot all plates with log scale
-        #     for file in combined_files:
-        #         x_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        #         z_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        #
-        #         print(f"Plotting combined file: {file.name} ({count + 1}/{len(combined_files)}).")
-        #         tem_file = TEMFile()
-        #         tem_file.parse(file)
-        #
-        #         residual_file = get_residual_file(tem_file, channels)  # Residual
-        #
-        #         plot_maxwell(tem_file, "b", 21, 44, "Combined Plate File", station_shift=-200, data_scaling=1e-6, alpha=1.)
-        #         plot_maxwell(residual_file, "r", 21, 44, "Residual", station_shift=-200, data_scaling=1e-6, alpha=0.6)
-        #
-        #         name = "Multiple and Bent Plate Models\n" + ' + '.join(list(file.stem)) + "\nResidual + Plates"
-        #         format_figure(name, tem_file, 21, 44, b_field=False, incl_legend=True)
-        #
-        #         pdf.savefig(figure, orientation='landscape')
-        #         for ax in axes:
-        #             ax.clear()
-        #
-        #         count += 1
-        #
-        #     os.startfile(out_pdf)
 
     # TODO Change "MUN" to "EM3D"
     # plot_aspect_ratio()
@@ -3445,8 +3598,8 @@ if __name__ == '__main__':
     # tabulate_run_on_convergence()
     # compare_maxwell_ribbons()
     # compare_step_on_b_with_theory()
-    # plot_overburden()
-    plot_bentplate()
+    plot_overburden()
+    # plot_bentplate()
 
     # tester = TestRunner()
     # tester.show()

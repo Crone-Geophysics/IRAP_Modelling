@@ -333,6 +333,18 @@ class MUNFile:
         # print(f"Parsed data from {self.filepath.name}:\n{data}")
         return self
 
+    def get_range(self, start_ch=None, end_ch=None):
+        if start_ch is None:
+            start_ch = 1
+        if end_ch is None:
+            end_ch = len(self.ch_times) + 1
+
+        channels = [f'CH{num}' for num in range(start_ch, end_ch)]
+        data = self.data.loc[:, channels]
+        mx = data.max().max()
+        mn = data.min().min()
+        return mn, mx
+
 
 if __name__ == '__main__':
     parser = MUNFile()
