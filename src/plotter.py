@@ -24,6 +24,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.pyplot import cm
 from matplotlib.ticker import MaxNLocator
+from matplotlib.lines import Line2D
 from natsort import natsorted, os_sorted
 
 from src.file_types.fem_file import FEMTab
@@ -65,6 +66,7 @@ quant_colors = np.nditer(np.array(plt.rcParams['axes.prop_cycle'].by_key()['colo
 
 options = {"Maxwell": "*.TEM", "MUN": "*.DAT", "IRAP": "*.DAT", "PLATE": "*.DAT"}
 colors = {"Maxwell": '#0000FF', "MUN": '#63DF48', "IRAP": "#000000", "PLATE": '#FF0000'}
+styles = {"Maxwell": '-', "MUN": ':', "IRAP": "--", "PLATE": '-.'}
 
 
 class ColorButton(QPushButton):
@@ -1930,11 +1932,11 @@ if __name__ == '__main__':
     # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
     # tem_file = sample_files.joinpath(r'Aspect ratio\Maxwell\5x150A.TEM')
 
-    def plot_maxwell(axes, file, color, ch_start, ch_end, ch_step=1, name="", station_shift=0, single_file=False,
-                     data_scaling=1., alpha=1., line_style='-', x_min=None, x_max=None, y_min=None, y_max=None):
-
+    def plot_maxwell(axes, file, ch_start, ch_end, ch_step=1, name="", station_shift=0, single_file=False,
+                     data_scaling=1., alpha=1., line_color=None, line_style=None, x_min=None, x_max=None,
+                     y_min=None, y_max=None, incl_label=True):
         x_ax, z_ax, x_ax_log, z_ax_log = axes
-        rainbow_colors = cm.gist_rainbow(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
+        rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
         x_ax.set_prop_cycle(cycler('color', rainbow_colors))
         x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
         z_ax.set_prop_cycle(cycler('color', rainbow_colors))
@@ -1947,17 +1949,21 @@ if __name__ == '__main__':
         min_ch = ch_start - 1
         max_ch = min(ch_end - 1, len(channels) - 1)
         plotting_channels = channels[min_ch: max_ch + 1: ch_step]
+        if single_file is True:
+            line_color = None
 
         for ind, ch in enumerate(plotting_channels):
-            if single_file is True:
-                # label = f"{file.ch_times[min_ch + ind]:.3f} ms"
-                label = ch
-                color = None
-            else:
-                if ind == 0:
-                    label = name
+            if incl_label is True:
+                if single_file is True:
+                    # label = f"{file.ch_times[min_ch + ind]:.3f} ms"
+                    label = ch
                 else:
-                    label = None
+                    if ind == 0:
+                        label = name
+                    else:
+                        label = None
+            else:
+                label = None
 
             x = z_data.STATION.astype(float) + station_shift
             zz = z_data.loc[:, ch].astype(float) * data_scaling
@@ -1965,7 +1971,7 @@ if __name__ == '__main__':
 
             for ax in [x_ax, x_ax_log]:
                 ax.plot(x, xx,
-                        color=color,
+                        color=line_color,
                         alpha=alpha,
                         # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                         label=label,
@@ -1973,7 +1979,7 @@ if __name__ == '__main__':
                         zorder=1)
             for ax in [z_ax, z_ax_log]:
                 ax.plot(x, zz,
-                        color=color,
+                        color=line_color,
                         alpha=alpha,
                         # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                         label=label,
@@ -1988,10 +1994,11 @@ if __name__ == '__main__':
                 if y_min and y_max:
                     ax.set_ylim([y_min, y_max])
 
-    def plot_mun(axes, file, color, ch_start, ch_end, ch_step=1, name="", station_shift=0, data_scaling=1., alpha=1.,
-                 line_style='-', x_min=None, x_max=None, y_min=None, y_max=None, single_file=False):
+    def plot_mun(axes, file, ch_start, ch_end, ch_step=1, name="", station_shift=0, data_scaling=1., alpha=1.,
+                 line_color=None, line_style=None, x_min=None, x_max=None, y_min=None, y_max=None, single_file=False,
+                 incl_label=True):
         x_ax, z_ax, x_ax_log, z_ax_log = axes
-        rainbow_colors = cm.rainbow(np.linspace(0, ch_step, (ch_start - ch_end) + 1))
+        rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
         x_ax.set_prop_cycle(cycler('color', rainbow_colors))
         x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
         z_ax.set_prop_cycle(cycler('color', rainbow_colors))
@@ -2004,16 +2011,20 @@ if __name__ == '__main__':
         min_ch = ch_start - 1
         max_ch = min(ch_end - 1, len(channels) - 1)
         plotting_channels = channels[min_ch: max_ch + 1: ch_step]
+        if single_file is True:
+            line_color = None
 
         for ind, ch in enumerate(plotting_channels):
-            if single_file is True:
-                label = ch
-                color = None
-            else:
-                if ind == 0:
-                    label = name
+            if incl_label is True:
+                if single_file is True:
+                    label = ch
                 else:
-                    label = None
+                    if ind == 0:
+                        label = name
+                    else:
+                        label = None
+            else:
+                label = None
 
             x = z_data.Station.astype(float) + station_shift
             zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
@@ -2021,7 +2032,7 @@ if __name__ == '__main__':
 
             for ax in [x_ax, x_ax_log]:
                 ax.plot(x, xx,
-                        color=color,
+                        color=line_color,
                         alpha=alpha,
                         # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                         label=label,
@@ -2029,7 +2040,7 @@ if __name__ == '__main__':
                         zorder=1)
             for ax in [z_ax, z_ax_log]:
                 ax.plot(x, zz,
-                        color=color,
+                        color=line_color,
                         alpha=alpha,
                         # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                         label=label,
@@ -2044,7 +2055,8 @@ if __name__ == '__main__':
                 if y_min and y_max:
                     ax.set_ylim([y_min, y_max])
 
-    def format_figure(figure, title, files, min_ch, max_ch, b_field=False, incl_legend=True):
+    def format_figure(figure, title, files, min_ch, max_ch, b_field=False, incl_legend=True, extra_handles=None,
+                      extra_labels=None):
         for legend in figure.legends:
             legend.remove()
 
@@ -2068,8 +2080,13 @@ if __name__ == '__main__':
             # Create the legend
             handles, labels = z_ax.get_legend_handles_labels()
 
-            # sort both labels and handles by labels
-            figure.legend(handles, labels)
+            if extra_handles:
+                manual_lines = [Line2D([0], [0], color='k', linestyle=ls) for ls in extra_handles]
+                handles.extend(manual_lines)
+                labels.extend(extra_labels)
+                # figure.legend(manual_lines, manual_labels, loc='center right')
+
+            figure.legend(handles, labels, loc='upper right')
 
         footnote = ''
         for file in files:
@@ -2801,345 +2818,1260 @@ if __name__ == '__main__':
 
     def plot_overburden():
 
-        def calc_response(ob_file, plate_file):
-            # Works for both MUN and Maxwell
-            print(f"Calculating response for {', '.join([f.filepath.name for f in [ob_file, plate_file]])}")
-            calculated_file = copy.deepcopy(plate_file)
-            channels = [f'CH{num}' for num in range(1, len(ob_file.ch_times) + 1)]
-            calculated_file.data.loc[:, channels] = ob_file.data.loc[:, channels] + plate_file.data.loc[:, channels]
-            return calculated_file
+        def plot_overburden_and_plates(ch_step=1):
+            """ Plot the overburden on its own """
 
-        def calc_residual(combined_file, ob_file, plate_file):
-            # Works for both MUN and Maxwell
-            print(f"Calculating residual for {', '.join([f.filepath.name for f in [combined_file, ob_file, plate_file]])}")
-            residual_file = copy.deepcopy(combined_file)
-            channels = [f'CH{num}' for num in range(1, len(ob_file.ch_times) + 1)]
+            def plot_plates(ch_step=1):
+                print(f">> Plotting plates alone")
+                # Plot the plate models on their own
+                for maxwell_file, mun_file, title in zip([maxwell_plate1_file, maxwell_plate2_file],
+                                                         [mun_plate1_file, mun_plate2_file],
+                                                         ["Plate 1 Only", "Plate 2 Only"]):
+                    plot_maxwell(axes,
+                                 maxwell_file,
+                                 min_ch,
+                                 max_ch,
+                                 ch_step=ch_step,
+                                 name="Maxwell",
+                                 alpha=0.6,
+                                 line_color=None,
+                                 line_style=styles.get("Maxwell"),
+                                 data_scaling=1e-6,
+                                 single_file=True,
+                                 incl_label=True)
 
-            calculated_data = ob_file.data.loc[:, channels] + plate_file.data.loc[:, channels]
-            residual_data = combined_file.data.loc[:, channels] - calculated_data
-            residual_file.data.loc[:, channels] = residual_data
-            return residual_file
+                    plot_mun(axes,
+                             mun_file,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name="MUN",
+                             alpha=1.,
+                             line_color=None,
+                             line_style=styles.get("MUN"),
+                             single_file=True,
+                             incl_label=False)
 
-        def calc_enhancement(combined_file, ob_file, plate_file):
-            # Works for both MUN and Maxwell
-            print(f"Calculating enhancement for {', '.join([f.filepath.name for f in [combined_file, ob_file, plate_file]])}")
-            enhance_file = copy.deepcopy(combined_file)
-            channels = [f'CH{num}' for num in range(1, len(ob_file.ch_times) + 1)]
+                    format_figure(figure,
+                                  "Overburden Models\n" + title, [maxwell_file, mun_file],
+                                  min_ch,
+                                  max_ch,
+                                  b_field=False,
+                                  incl_legend=True,
+                                  extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                                  extra_labels=["Maxwell", "MUN"])
 
-            enhance_data = combined_file.data.loc[:, channels] - ob_file.data.loc[:, channels]
-            enhance_file.data.loc[:, channels] = enhance_data
-            return enhance_file
+                    pdf.savefig(figure, orientation='landscape')
+                    clear_axes(axes)
+                    log_scale(x_ax_log, z_ax_log)
 
-        def plot_plates(ch_step=1):
-            print(f">> Plotting plates alone")
+            def plot_overburden(ch_step=1):
+                print(f">> Plotting overburden alone ({conductance})")
+                plot_maxwell(axes,
+                             maxwell_ob_file,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name="Maxwell",
+                             alpha=0.6,
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             data_scaling=1e-6,
+                             single_file=True,
+                             incl_label=True)
 
-            # Plot the plate models on their own
-            for maxwell_file, mun_file, title in zip([maxwell_plate1_file, maxwell_plate2_file],
-                                                     [mun_plate1_file, mun_plate2_file],
-                                                     ["Plate 1 Only", "Plate 2 Only"]):
-                plot_maxwell(axes, maxwell_file, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Maxwell", data_scaling=1e-6)
-                plot_mun(axes, mun_file, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", alpha=0.9)
-                format_figure(figure, title, [maxwell_file, mun_file], min_ch, max_ch, b_field=False, incl_legend=True)
+                plot_mun(axes,
+                         mun_ob_file,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name="MUN",
+                         alpha=1.,
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False)
+
+                format_figure(figure,
+                              f"Overburden Models\n{conductance} Overburden Only", [maxwell_ob_file, mun_ob_file],
+                              min_ch,
+                              max_ch,
+                              b_field=False,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
                 pdf.savefig(figure, orientation='landscape')
                 clear_axes(axes)
                 log_scale(x_ax_log, z_ax_log)
 
-        def plot_overburden(ch_step=1):
-            """ Plot the overburden on its own """
-
-            """Plot plates and overburdens only"""
             out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Plates & Overburden Only.PDF")
             with PdfPages(out_pdf) as pdf:
-                # Plot the plate models on their own
-                plot_plates(ch_step=channel_step)
+                plot_plates(ch_step=ch_step)
 
                 for conductance in ["1S", "10S"]:
                     maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
                     mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
+                    plot_overburden(ch_step=ch_step)
 
-                    plot_overburden(ch_step=channel_step)
             os.startfile(out_pdf)
 
-            print(f">> Plotting overburden alone ({conductance})")
-            plot_maxwell(axes, maxwell_ob_file, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step,  name="Maxwell", data_scaling=1e-6)
-            plot_mun(axes, mun_ob_file, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", alpha=0.9)
-            format_figure(figure, f"{conductance} Overburden Only", [maxwell_ob_file, mun_ob_file], min_ch, max_ch, b_field=False, incl_legend=True)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
-
         def plot_contact_effect(ch_step=1):
-            print(f">> Plotting plate contact ({conductance})")
-            # Plot the in-contact plate with separated plate for each method
-            plot_maxwell(axes, maxwell_comb_sep_file1, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Separated", line_style='-', data_scaling=1e-6, alpha=1.)
-            plot_maxwell(axes, maxwell_comb_con_file1, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Contact", line_style='--', data_scaling=1e-6)
-            format_figure(figure, f"Maxwell Plate Contact vs Separation - {conductance} Overburden + Plate 1", [maxwell_comb_sep_file1], min_ch, max_ch, b_field=False, incl_legend=True)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            """Effects of plate contact"""
 
-            # Plot the in-contact plate with separated plate for each method
-            plot_maxwell(axes, maxwell_comb_sep_file2, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Separated", line_style='-', data_scaling=1e-6, alpha=1.)
-            plot_maxwell(axes, maxwell_comb_con_file2, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Contact", line_style='--', data_scaling=1e-6)
-            format_figure(figure, f"Maxwell Plate Contact vs Separation - {conductance} Overburden + Plate 2", [maxwell_comb_sep_file2], min_ch, max_ch, b_field=False, incl_legend=True)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            def plot_maxwell_contact_effect():
+                print(F">>Plotting Maxwell contact effect ({conductance})")
+                # Plot the in-contact plate with separated plate for each method
+                plot_maxwell(axes,
+                             maxwell_comb_sep_file1,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name="Separated",
+                             line_color=None,
+                             line_style='--',
+                             data_scaling=1e-6,
+                             alpha=1.,
+                             single_file=True,
+                             incl_label=False)
+                plot_maxwell(axes,
+                             maxwell_comb_con_file1,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name="Contact",
+                             line_color=None,
+                             line_style='-',
+                             data_scaling=1e-6,
+                             single_file=True,
+                             incl_label=True)
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Maxwell Plate Contact vs Separation [{conductance} Overburden with Plate 1]",
+                              [maxwell_comb_sep_file1],
+                              min_ch,
+                              max_ch,
+                              b_field=False,
+                              incl_legend=True,
+                              extra_handles=["--", "-"],
+                              extra_labels=["Separated", "Contact"])
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
 
-            plot_mun(axes, mun_comb_sep_file1, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="Separated", line_style='-', alpha=1.)
-            plot_mun(axes, mun_comb_con_file1, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="Contact", line_style='--')
-            format_figure(figure, f"MUN Plate Contact vs Separation - {conductance} Overburden + Plate 1", [mun_comb_sep_file1], min_ch, max_ch, b_field=False, incl_legend=True)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                # Plot the in-contact plate with separated plate for each method
+                plot_maxwell(axes,
+                             maxwell_comb_sep_file2,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name="Separated",
+                             line_color=None,
+                             line_style='--',
+                             data_scaling=1e-6,
+                             alpha=1.,
+                             single_file=True,
+                             incl_label=False)
+                plot_maxwell(axes,
+                             maxwell_comb_con_file2,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name="Contact",
+                             line_color=None,
+                             line_style='-',
+                             data_scaling=1e-6,
+                             single_file=True,
+                             incl_label=True)
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Maxwell Plate Contact vs Separation [{conductance} Overburden with Plate 2]",
+                              [maxwell_comb_sep_file2],
+                              min_ch,
+                              max_ch,
+                              b_field=False,
+                              incl_legend=True,
+                              extra_handles=["--", "-"],
+                              extra_labels=["Separated", "Contact"])
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
 
-            plot_mun(axes, mun_comb_sep_file2, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="Separated", line_style='-', alpha=1.)
-            plot_mun(axes, mun_comb_con_file2, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="Contact", line_style='--')
-            format_figure(figure, f"MUN Plate Contact vs Separation - {conductance} Overburden + Plate 2", [mun_comb_sep_file2], min_ch, max_ch, b_field=False, incl_legend=True)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            def plot_mun_contact_effect():
+                print(F">>Plotting MUN contact effect ({conductance})")
+                plot_mun(axes,
+                         mun_comb_sep_file1,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name="Separated",
+                         line_color=None,
+                         line_style='--',
+                         alpha=1.,
+                         single_file=True,
+                         incl_label=False)
+                plot_mun(axes,
+                         mun_comb_con_file1,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name="Contact",
+                         line_color=None,
+                         line_style='-',
+                         single_file=True,
+                         incl_label=True)
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"MUN Plate Contact vs Separation [{conductance} Overburden with Plate 1]",
+                              [mun_comb_sep_file1],
+                              min_ch,
+                              max_ch,
+                              b_field=False,
+                              incl_legend=True,
+                              extra_handles=["--", "-"],
+                              extra_labels=["Separated", "Contact"])
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
 
-            # Calculate the difference between separate and contact plates
-            plot_maxwell(axes, maxwell_plate1_diff, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Maxwell", line_style='-', data_scaling=1e-6, alpha=1.)
-            plot_mun(axes, mun_plate1_diff, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", line_style='-', alpha=0.9)
-            format_figure(figure, f"Separation vs Contact Differential - {conductance} Overburden + Plate 1", [maxwell_plate1_diff, mun_plate1_diff], min_ch, max_ch, b_field=False, incl_legend=True)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                plot_mun(axes,
+                         mun_comb_sep_file2,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name="Separated",
+                         line_color=None,
+                         line_style='--',
+                         alpha=1.,
+                         single_file=True,
+                         incl_label=False)
+                plot_mun(axes,
+                         mun_comb_con_file2,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name="Contact",
+                         line_color=None,
+                         line_style='-',
+                         single_file=True,
+                         incl_label=True)
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"MUN Plate Contact vs Separation [{conductance} Overburden with Plate 2]",
+                              [mun_comb_sep_file2],
+                              min_ch,
+                              max_ch,
+                              b_field=False,
+                              incl_legend=True,
+                              extra_handles=["--", "-"],
+                              extra_labels=["Separated", "Contact"])
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
 
-            plot_maxwell(axes, maxwell_plate2_diff, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Maxwell", line_style='-', data_scaling=1e-6, alpha=1.)
-            plot_mun(axes, mun_plate2_diff, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", line_style='-', alpha=0.9)
-            format_figure(figure, f"Separation vs Contact Differential - {conductance} Overburden + Plate 2", [maxwell_plate2_diff, mun_plate2_diff], min_ch, max_ch, b_field=False, incl_legend=True)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            def plot_differential():
+                print(F">>Plotting contact differential ({conductance})")
+                # Calculate the difference between separate and contact plates
+                plot_maxwell(axes,
+                             maxwell_plate1_diff,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name="Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
 
-        def plot_maxwell_calculation_comparison(ch_step=1):
-            """
-            Plot Maxwell plate model with calculated response of the individual plates
-            """
-            print(f">> Plotting maxwell mutual response ({conductance})")
-            """Plate 1 with separation"""
-            plot_maxwell(axes, maxwell_comb_sep_file1, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
-            plot_maxwell(axes, maxwell_plate_1_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, data_scaling=1e-6, alpha=0.9)
-            format_figure(figure, f"Maxwell Individual Plates vs Combined Model - {conductance} Overburden + Plate 1 (Separated)", [maxwell_comb_sep_file1], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                plot_mun(axes,
+                         mun_plate1_diff,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name="MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=0.9)
 
-            """Plate 2 with separation"""
-            plot_maxwell(axes, maxwell_comb_sep_file2, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
-            plot_maxwell(axes, maxwell_plate_2_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, data_scaling=1e-6, alpha=0.9)
-            format_figure(figure, f"Maxwell Individual Plates vs Combined Model - {conductance} Overburden + Plate 2 (Separated)", [maxwell_comb_sep_file2], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Separation vs Contact Differential [{conductance} Overburden with Plate 1]",
+                              [maxwell_plate1_diff,
+                               mun_plate1_diff],
+                              min_ch,
+                              max_ch,
+                              b_field=False,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
 
-            """Plate 1 contact"""
-            plot_maxwell(axes, maxwell_comb_con_file1, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
-            plot_maxwell(axes, maxwell_plate_1_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, data_scaling=1e-6, alpha=0.9)
-            format_figure(figure, f"Maxwell Individual Plates vs Combined Model - {conductance} Overburden + Plate 1 (Contact)", [maxwell_comb_con_file1], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
 
-            """Plate 2 contact"""
-            plot_maxwell(axes, maxwell_comb_con_file2, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
-            plot_maxwell(axes, maxwell_plate_2_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, data_scaling=1e-6, alpha=0.9)
-            format_figure(figure, f"Maxwell Individual Plates vs Combined Model - {conductance} Overburden + Plate 2 (Contact)", [maxwell_comb_con_file2], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                plot_maxwell(axes,
+                             maxwell_plate2_diff,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name="Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
 
-        def plot_mun_calculation_comparison(ch_step=1):
-            """
-            Plot MUN plate model with calculated response of the individual plates
-            """
-            print(f">> Plotting MUN calculated response vs model ({conductance})")
-            """Plate 1 with separation"""
-            plot_mun(axes, mun_comb_sep_file1, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
-            plot_mun(axes, mun_plate_1_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
-            format_figure(figure, f"MUN Individual Plates vs Combined Model - {conductance} Overburden + Plate 1 (Separated)", [mun_comb_sep_file1], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                plot_mun(axes,
+                         mun_plate2_diff,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name="MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=0.9)
 
-            """Plate 2 with separation"""
-            plot_mun(axes, mun_comb_sep_file2, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
-            plot_mun(axes, mun_plate_2_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
-            format_figure(figure, f"MUN Individual Plates vs Combined Model - {conductance} Overburden + Plate 2 (Separated)", [mun_comb_sep_file2], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Separation vs Contact Differential [{conductance} Overburden with Plate 2]",
+                              [maxwell_plate2_diff, mun_plate2_diff],
+                              min_ch,
+                              max_ch,
+                              b_field=False,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
 
-            """Plate 1 contact"""
-            plot_mun(axes, mun_comb_con_file1, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
-            plot_mun(axes, mun_plate_1_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
-            format_figure(figure, f"MUN Individual Plates vs Combined Model - {conductance} Overburden + Plate 1 (Contact)", [mun_comb_con_file1], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
 
-            """Plate 2 contact"""
-            plot_mun(axes, mun_comb_con_file2, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
-            plot_mun(axes, mun_plate_2_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
-            format_figure(figure, f"MUN Individual Plates vs Combined Model - {conductance} Overburden + Plate 2 (Contact)", [mun_comb_con_file2], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Effects of Plate Contact.PDF")
+            with PdfPages(out_pdf) as pdf:
 
-        def plot_maxwell_residual(ch_step=1):
-            print(f">> Plotting maxwell residual response ({conductance})")
+                for conductance in ["1S", "10S"]:
+                    maxwell_comb_sep_file1 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
+                    maxwell_comb_sep_file2 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
+                    maxwell_comb_con_file1 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
+                    maxwell_comb_con_file2 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
 
-            """Plate 1 with separation"""
-            plot_maxwell(axes, maxwell_comb_sep_file1, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
-            plot_maxwell(axes, maxwell_plate_1_residual_sep, "r", min_ch, max_ch, name=f"Residual", station_shift=0, data_scaling=1e-6, alpha=0.9)
-            format_figure(figure, f"Maxwell - {conductance} Overburden + Plate 1 (Separated) Residual Calculation", [maxwell_comb_sep_file1], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                    mun_comb_sep_file1 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
+                    mun_comb_sep_file2 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
+                    mun_comb_con_file1 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
+                    mun_comb_con_file2 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
 
-            """Plate 2 with separation"""
-            plot_maxwell(axes, maxwell_comb_sep_file2, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
-            plot_maxwell(axes, maxwell_plate_2_residual_sep, "r", min_ch, max_ch, name=f"Residual", station_shift=0, data_scaling=1e-6, alpha=0.9)
-            format_figure(figure, f"Maxwell - {conductance} Overburden + Plate 2 (Separated) Residual Calculation", [maxwell_comb_sep_file2], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                    channels = [f'CH{num}' for num in range(1, max_ch - min_ch + 1)]
+                    maxwell_plate1_diff = copy.deepcopy(maxwell_comb_sep_file1)
+                    maxwell_plate2_diff = copy.deepcopy(maxwell_comb_sep_file2)
+                    maxwell_plate1_diff.data.loc[:, channels] = maxwell_comb_con_file1.data.loc[:, channels] - maxwell_comb_sep_file1.data.loc[:, channels]
+                    maxwell_plate2_diff.data.loc[:, channels] = maxwell_comb_con_file2.data.loc[:, channels] - maxwell_comb_sep_file2.data.loc[:, channels]
 
-            """Plate 1 contact"""
-            plot_maxwell(axes, maxwell_comb_con_file1, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
-            plot_maxwell(axes, maxwell_plate_1_residual_con, "r", min_ch, max_ch, name=f"Residual", station_shift=0, data_scaling=1e-6, alpha=0.9)
-            format_figure(figure, f"Maxwell - {conductance} Overburden + Plate 1 (Contact) Residual Calculation", [maxwell_comb_con_file1], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                    mun_plate1_diff = copy.deepcopy(mun_comb_sep_file1)
+                    mun_plate2_diff = copy.deepcopy(mun_comb_sep_file2)
+                    mun_plate1_diff.data.loc[:, channels] = mun_comb_con_file1.data.loc[:, channels] - mun_comb_sep_file1.data.loc[:, channels]
+                    mun_plate2_diff.data.loc[:, channels] = mun_comb_con_file2.data.loc[:, channels] - mun_comb_sep_file2.data.loc[:, channels]
 
-            """Plate 2 contact"""
-            plot_maxwell(axes, maxwell_comb_con_file2, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
-            plot_maxwell(axes, maxwell_plate_2_residual_con, "r", min_ch, max_ch, name=f"Residual", station_shift=0, data_scaling=1e-6, alpha=0.9)
-            format_figure(figure, f"Maxwell - {conductance} Overburden + Plate 2 (Contact) Residual Calculation", [maxwell_comb_con_file2], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                    plot_maxwell_contact_effect()
+                    plot_mun_contact_effect()
+                    plot_differential()
+            os.startfile(out_pdf)
 
-        def plot_mun_residual(ch_step=1):
-            """
-            Plot MUN plate model with calculated response of the individual plates
-            """
-            print(f">> Plotting maxwell residual response ({conductance})")
-
-            """Plate 1 with separation"""
-            plot_mun(axes, mun_comb_sep_file1, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
-            plot_mun(axes, mun_plate_1_residual_sep, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
-            format_figure(figure, f"MUN - {conductance} Overburden + Plate 1 (Separated) Residual Calculation", [mun_comb_sep_file1], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
-
-            """Plate 2 with separation"""
-            plot_mun(axes, mun_comb_sep_file2, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
-            plot_mun(axes, mun_plate_2_residual_sep, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
-            format_figure(figure, f"MUN - {conductance} Overburden + Plate 2 (Separated) Residual Calculation", [mun_comb_sep_file2], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
-
-            """Plate 1 contact"""
-            plot_mun(axes, mun_comb_con_file1, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
-            plot_mun(axes, mun_plate_1_residual_con, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
-            format_figure(figure, f"MUN - {conductance} Overburden + Plate 1 (Contact) Residual Calculation", [mun_comb_con_file1], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
-
-            """Plate 2 contact"""
-            plot_mun(axes, mun_comb_con_file2, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
-            plot_mun(axes, mun_plate_2_residual_con, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
-            format_figure(figure, f"MUN - {conductance} Overburden + Plate 2 (Contact) Residual Calculation", [mun_comb_con_file2], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+        # def plot_maxwell_calculation_comparison(ch_step=1):
+        #     """
+        #     Plot Maxwell plate model with calculated response of the individual plates
+        #     """
+        #
+        #     def calc_response(ob_file, plate_file):
+        #         # Works for both MUN and Maxwell
+        #         print(f"Calculating response for {', '.join([f.filepath.name for f in [ob_file, plate_file]])}")
+        #         calculated_file = copy.deepcopy(plate_file)
+        #         channels = [f'CH{num}' for num in range(1, len(ob_file.ch_times) + 1)]
+        #         calculated_file.data.loc[:, channels] = ob_file.data.loc[:, channels] + plate_file.data.loc[:, channels]
+        #         return calculated_file
+        #
+        #     def plot_maxwell_comparison():
+        #         print(f">> Plotting Maxwell calculated response vs model [{conductance})")
+        #         """Plate 1 with separation"""
+        #         plot_maxwell(axes, maxwell_comb_sep_file1, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
+        #         plot_maxwell(axes, maxwell_plate_1_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, data_scaling=1e-6, alpha=0.9)
+        #         format_figure(figure, f"Maxwell Individual Plates vs Combined Model - {conductance} Overburden + Plate 1 (Separated]", [maxwell_comb_sep_file1], min_ch, max_ch)
+        #         pdf.savefig(figure, orientation='landscape')
+        #         clear_axes(axes)
+        #         log_scale(x_ax_log, z_ax_log)
+        #
+        #         """Plate 2 with separation"""
+        #         plot_maxwell(axes, maxwell_comb_sep_file2, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
+        #         plot_maxwell(axes, maxwell_plate_2_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, data_scaling=1e-6, alpha=0.9)
+        #         format_figure(figure, f"Maxwell Individual Plates vs Combined Model - {conductance} Overburden + Plate 2 (Separated]", [maxwell_comb_sep_file2], min_ch, max_ch)
+        #         pdf.savefig(figure, orientation='landscape')
+        #         clear_axes(axes)
+        #         log_scale(x_ax_log, z_ax_log)
+        #
+        #         """Plate 1 contact"""
+        #         plot_maxwell(axes, maxwell_comb_con_file1, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
+        #         plot_maxwell(axes, maxwell_plate_1_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, data_scaling=1e-6, alpha=0.9)
+        #         format_figure(figure, f"Maxwell Individual Plates vs Combined Model - {conductance} Overburden + Plate 1 (Contact)", [maxwell_comb_con_file1], min_ch, max_ch)
+        #         pdf.savefig(figure, orientation='landscape')
+        #         clear_axes(axes)
+        #         log_scale(x_ax_log, z_ax_log)
+        #
+        #         """Plate 2 contact"""
+        #         plot_maxwell(axes, maxwell_comb_con_file2, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0, data_scaling=1e-6)
+        #         plot_maxwell(axes, maxwell_plate_2_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, data_scaling=1e-6, alpha=0.9)
+        #         format_figure(figure, f"Maxwell Individual Plates vs Combined Model - {conductance} Overburden + Plate 2 (Contact)", [maxwell_comb_con_file2], min_ch, max_ch)
+        #         pdf.savefig(figure, orientation='landscape')
+        #         clear_axes(axes)
+        #         log_scale(x_ax_log, z_ax_log)
+        #
+        #     def plot_mun_comparison():
+        #         """
+        #         Plot MUN plate model with calculated response of the individual plates
+        #         """
+        #         print(f">> Plotting MUN calculated response vs model [{conductance})")
+        #         """Plate 1 with separation"""
+        #         plot_mun(axes, mun_comb_sep_file1, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
+        #         plot_mun(axes, mun_plate_1_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
+        #         format_figure(figure, f"MUN Individual Plates vs Combined Model - {conductance} Overburden + Plate 1 (Separated]", [mun_comb_sep_file1], min_ch, max_ch)
+        #         pdf.savefig(figure, orientation='landscape')
+        #         clear_axes(axes)
+        #         log_scale(x_ax_log, z_ax_log)
+        #
+        #         """Plate 2 with separation"""
+        #         plot_mun(axes, mun_comb_sep_file2, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
+        #         plot_mun(axes, mun_plate_2_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
+        #         format_figure(figure, f"MUN Individual Plates vs Combined Model - {conductance} Overburden + Plate 2 (Separated]", [mun_comb_sep_file2], min_ch, max_ch)
+        #         pdf.savefig(figure, orientation='landscape')
+        #         clear_axes(axes)
+        #         log_scale(x_ax_log, z_ax_log)
+        #
+        #         """Plate 1 contact"""
+        #         plot_mun(axes, mun_comb_con_file1, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
+        #         plot_mun(axes, mun_plate_1_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
+        #         format_figure(figure, f"MUN Individual Plates vs Combined Model - {conductance} Overburden + Plate 1 (Contact)", [mun_comb_con_file1], min_ch, max_ch)
+        #         pdf.savefig(figure, orientation='landscape')
+        #         clear_axes(axes)
+        #         log_scale(x_ax_log, z_ax_log)
+        #
+        #         """Plate 2 contact"""
+        #         plot_mun(axes, mun_comb_con_file2, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name=f"Modelled", station_shift=0)
+        #         plot_mun(axes, mun_plate_2_calculated, "r", min_ch, max_ch, name=f"Calculated", station_shift=0, alpha=0.9)
+        #         format_figure(figure, f"MUN Individual Plates vs Combined Model - {conductance} Overburden + Plate 2 (Contact)", [mun_comb_con_file2], min_ch, max_ch)
+        #         pdf.savefig(figure, orientation='landscape')
+        #         clear_axes(axes)
+        #         log_scale(x_ax_log, z_ax_log)
+        #
+        #     out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Mutual Inductance.PDF")
+        #     with PdfPages(out_pdf) as pdf:
+        #
+        #         for conductance in ["1S", "10S"]:
+        #             maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
+        #             mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
+        #
+        #             maxwell_comb_sep_file1 = TEMFile().parse(
+        #                 Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
+        #             maxwell_comb_sep_file2 = TEMFile().parse(
+        #                 Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
+        #             maxwell_comb_con_file1 = TEMFile().parse(
+        #                 Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
+        #             maxwell_comb_con_file2 = TEMFile().parse(
+        #                 Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
+        #
+        #             mun_comb_sep_file1 = MUNFile().parse(
+        #                 Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
+        #             mun_comb_sep_file2 = MUNFile().parse(
+        #                 Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
+        #             mun_comb_con_file1 = MUNFile().parse(
+        #                 Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
+        #             mun_comb_con_file2 = MUNFile().parse(
+        #                 Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
+        #
+        #             maxwell_plate_1_calculated = calc_response(maxwell_ob_file, maxwell_plate1_file)
+        #             maxwell_plate_2_calculated = calc_response(maxwell_ob_file, maxwell_plate2_file)
+        #             mun_plate_1_calculated = calc_response(mun_ob_file, mun_plate1_file)
+        #             mun_plate_2_calculated = calc_response(mun_ob_file, mun_plate2_file)
+        #
+        #             plot_maxwell_comparison()
+        #             plot_mun_comparison()
+        #
+        #     os.startfile(out_pdf)
 
         def plot_residual(ch_step=1):
             """
             Compare Maxwell and MUN residuals.
             Residual is the effect of mutual induction: combined model - all individual plates.
             """
-            print(f">> Plotting residual response ({conductance})")
 
-            """Plate 1 with separation"""
-            plot_maxwell(axes, maxwell_plate_1_residual_sep, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Maxwell", station_shift=0, data_scaling=1e-6)
-            plot_mun(axes, mun_plate_1_residual_sep, colors.get("MUN"), min_ch, max_ch, name=f"MUN", station_shift=0, alpha=0.9)
-            format_figure(figure, f"{conductance} Overburden + Plate 1 Residual (Separated)", [maxwell_plate_1_residual_sep, mun_plate_1_residual_sep], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            def calc_residual(combined_file, ob_file, plate_file):
+                # Works for both MUN and Maxwell
+                print(f"Calculating residual for {', '.join([f.filepath.name for f in [combined_file, ob_file, plate_file]])}")
+                residual_file = copy.deepcopy(combined_file)
+                channels = [f'CH{num}' for num in range(1, len(ob_file.ch_times) + 1)]
 
-            """Plate 2 with separation"""
-            plot_maxwell(axes, maxwell_plate_2_residual_sep, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Maxwell", station_shift=0, data_scaling=1e-6)
-            plot_mun(axes, mun_plate_2_residual_sep, colors.get("MUN"), min_ch, max_ch, name=f"MUN", station_shift=0, alpha=0.9)
-            format_figure(figure, f"{conductance} Overburden + Plate 2 Residual (Separated)", [maxwell_plate_2_residual_sep, mun_plate_2_residual_sep], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                calculated_data = ob_file.data.loc[:, channels] + plate_file.data.loc[:, channels]
+                residual_data = combined_file.data.loc[:, channels] - calculated_data
+                residual_file.data.loc[:, channels] = residual_data
+                return residual_file
 
-            """Plate 1 contact"""
-            plot_maxwell(axes, maxwell_plate_1_residual_con, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Maxwell", station_shift=0, data_scaling=1e-6)
-            plot_mun(axes, mun_plate_1_residual_con, colors.get("MUN"), min_ch, max_ch, name=f"MUN", station_shift=0, alpha=0.9)
-            format_figure(figure, f"{conductance} Overburden + Plate 1 Residual (Contact)", [maxwell_plate_1_residual_con, mun_plate_1_residual_con], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            # def plot_maxwell_residual(ch_step=1):
+            #     print(f">> Plotting Maxwell residual response ({conductance})")
+            #     """Plate 1 with separation"""
+            #     plot_maxwell(axes,
+            #                  maxwell_comb_sep_file1,
+            #                  min_ch,
+            #                  max_ch,
+            #                  ch_step=ch_step,
+            #                  name="Modelled",
+            #                  line_color=None,
+            #                  line_style="-",
+            #                  single_file=True,
+            #                  incl_label=True,
+            #                  data_scaling=1e-6,
+            #                  alpha=1.)
+            #
+            #     plot_maxwell(axes,
+            #                  maxwell_plate_1_residual_sep,
+            #                  min_ch,
+            #                  max_ch,
+            #                  ch_step=ch_step,
+            #                  name="Residual",
+            #                  line_color=None,
+            #                  line_style="--",
+            #                  single_file=True,
+            #                  incl_label=False,
+            #                  data_scaling=1e-6,
+            #                  alpha=1.)
+            #
+            #     format_figure(figure,
+            #                   f"Overburden Models\n"
+            #                   f"Maxwell Residual Calculation [{conductance} Overburden with Plate 1, Separated]",
+            #                   [maxwell_comb_sep_file1],
+            #                   min_ch,
+            #                   max_ch,
+            #                   b_field=False,
+            #                   extra_handles=['-', '--'],
+            #                   extra_labels=["Modelled", "Residual"])
+            #
+            #     pdf.savefig(figure, orientation='landscape')
+            #     clear_axes(axes)
+            #     log_scale(x_ax_log, z_ax_log)
+            #
+            #     """Plate 2 with separation"""
+            #     plot_maxwell(axes,
+            #                  maxwell_comb_sep_file2,
+            #                  min_ch,
+            #                  max_ch,
+            #                  ch_step=ch_step,
+            #                  name="Modelled",
+            #                  line_color=None,
+            #                  line_style="-",
+            #                  single_file=True,
+            #                  incl_label=True,
+            #                  data_scaling=1e-6,
+            #                  alpha=1.)
+            #
+            #     plot_maxwell(axes,
+            #                  maxwell_plate_2_residual_sep,
+            #                  min_ch,
+            #                  max_ch,
+            #                  ch_step=ch_step,
+            #                  name="Residual",
+            #                  line_color=None,
+            #                  line_style="--",
+            #                  single_file=True,
+            #                  incl_label=False,
+            #                  data_scaling=1e-6,
+            #                  alpha=1.)
+            #
+            #     format_figure(figure,
+            #                   f"Overburden Models\n"
+            #                   f"Maxwell Residual Calculation [{conductance} Overburden with Plate 2, Separated]",
+            #                   [maxwell_comb_sep_file1],
+            #                   min_ch,
+            #                   max_ch,
+            #                   b_field=False,
+            #                   extra_handles=['-', '--'],
+            #                   extra_labels=["Modelled", "Residual"])
+            #
+            #     pdf.savefig(figure, orientation='landscape')
+            #     clear_axes(axes)
+            #     log_scale(x_ax_log, z_ax_log)
+            #
+            #     """Plate 1 contact"""
+            #     plot_maxwell(axes,
+            #                  maxwell_comb_con_file1,
+            #                  min_ch,
+            #                  max_ch,
+            #                  ch_step=ch_step,
+            #                  name="Modelled",
+            #                  line_color=None,
+            #                  line_style="-",
+            #                  single_file=True,
+            #                  incl_label=True,
+            #                  data_scaling=1e-6,
+            #                  alpha=1.)
+            #
+            #     plot_maxwell(axes,
+            #                  maxwell_plate_1_residual_con,
+            #                  min_ch,
+            #                  max_ch,
+            #                  ch_step=ch_step,
+            #                  name="Residual",
+            #                  line_color=None,
+            #                  line_style="--",
+            #                  single_file=True,
+            #                  incl_label=False,
+            #                  data_scaling=1e-6,
+            #                  alpha=1.)
+            #
+            #     format_figure(figure,
+            #                   f"Overburden Models\n"
+            #                   f"Maxwell Residual Calculation [{conductance} Overburden with Plate 1, Contact]",
+            #                   [maxwell_comb_con_file1],
+            #                   min_ch,
+            #                   max_ch,
+            #                   extra_handles=['-', '--'],
+            #                   extra_labels=["Modelled", "Residual"])
+            #
+            #     pdf.savefig(figure, orientation='landscape')
+            #     clear_axes(axes)
+            #     log_scale(x_ax_log, z_ax_log)
+            #
+            #     """Plate 2 contact"""
+            #     plot_maxwell(axes,
+            #                  maxwell_comb_con_file2,
+            #                  min_ch,
+            #                  max_ch,
+            #                  ch_step=ch_step,
+            #                  name="Modelled",
+            #                  line_color=None,
+            #                  line_style="-",
+            #                  single_file=True,
+            #                  incl_label=True,
+            #                  data_scaling=1e-6,
+            #                  alpha=1.)
+            #
+            #     plot_maxwell(axes,
+            #                  maxwell_plate_2_residual_con,
+            #                  min_ch,
+            #                  max_ch,
+            #                  ch_step=ch_step,
+            #                  name="Residual",
+            #                  line_color=None,
+            #                  line_style="--",
+            #                  single_file=True,
+            #                  incl_label=False,
+            #                  data_scaling=1e-6,
+            #                  alpha=1.)
+            #
+            #     format_figure(figure,
+            #                   f"Overburden Models\n"
+            #                   f"Maxwell Residual Calculation [{conductance} Overburden with Plate 2, Contact]",
+            #                   [maxwell_comb_con_file1],
+            #                   min_ch,
+            #                   max_ch,
+            #                   extra_handles=['-', '--'],
+            #                   extra_labels=["Modelled", "Residual"])
+            #     pdf.savefig(figure, orientation='landscape')
+            #     clear_axes(axes)
+            #     log_scale(x_ax_log, z_ax_log)
+            #
+            # def plot_mun_residual(ch_step=1):
+            #     """
+            #     Plot MUN plate model with calculated response of the individual plates
+            #     """
+            #     print(f">> Plotting MUN residual response ({conductance})")
+            #
+            #     """Plate 1 with separation"""
+            #     plot_mun(axes,
+            #              mun_comb_sep_file1,
+            #              min_ch,
+            #              max_ch,
+            #              ch_step=ch_step,
+            #              name="Modelled",
+            #              line_color=None,
+            #              line_style="-",
+            #              single_file=True,
+            #              incl_label=True,
+            #              alpha=1.)
+            #
+            #     plot_mun(axes,
+            #              mun_plate_1_residual_sep,
+            #              min_ch,
+            #              max_ch,
+            #              ch_step=ch_step,
+            #              name="Residual",
+            #              line_color=None,
+            #              line_style="--",
+            #              single_file=True,
+            #              incl_label=False,
+            #              alpha=1.)
+            #
+            #     format_figure(figure,
+            #                   f"Overburden Models\n"
+            #                   f"MUN Residual Calculation [{conductance} Overburden with Plate 1, Separated]",
+            #                   [mun_comb_sep_file1],
+            #                   min_ch,
+            #                   max_ch,
+            #                   b_field=False,
+            #                   extra_handles=['-', '--'],
+            #                   extra_labels=["Modelled", "Residual"])
+            #
+            #     pdf.savefig(figure, orientation='landscape')
+            #     clear_axes(axes)
+            #     log_scale(x_ax_log, z_ax_log)
+            #
+            #     """Plate 2 with separation"""
+            #     plot_mun(axes,
+            #              mun_comb_sep_file2,
+            #              min_ch,
+            #              max_ch,
+            #              ch_step=ch_step,
+            #              name="Modelled",
+            #              line_color=None,
+            #              line_style="-",
+            #              single_file=True,
+            #              incl_label=True,
+            #              alpha=1.)
+            #
+            #     plot_mun(axes,
+            #              mun_plate_2_residual_sep,
+            #              min_ch,
+            #              max_ch,
+            #              ch_step=ch_step,
+            #              name="Residual",
+            #              line_color=None,
+            #              line_style="--",
+            #              single_file=True,
+            #              incl_label=False,
+            #              alpha=1.)
+            #
+            #     format_figure(figure,
+            #                   f"Overburden Models\n"
+            #                   f"MUN Residual Calculation [{conductance} Overburden with Plate 2, Separated]",
+            #                   [mun_comb_sep_file1],
+            #                   min_ch,
+            #                   max_ch,
+            #                   b_field=False,
+            #                   extra_handles=['-', '--'],
+            #                   extra_labels=["Modelled", "Residual"])
+            #
+            #     pdf.savefig(figure, orientation='landscape')
+            #     clear_axes(axes)
+            #     log_scale(x_ax_log, z_ax_log)
+            #
+            #     """Plate 1 contact"""
+            #     plot_mun(axes,
+            #              mun_comb_con_file1,
+            #              min_ch,
+            #              max_ch,
+            #              ch_step=ch_step,
+            #              name="Modelled",
+            #              line_color=None,
+            #              line_style="-",
+            #              single_file=True,
+            #              incl_label=True,
+            #              alpha=1.)
+            #
+            #     plot_mun(axes,
+            #              mun_plate_1_residual_con,
+            #              min_ch,
+            #              max_ch,
+            #              ch_step=ch_step,
+            #              name="Residual",
+            #              line_color=None,
+            #              line_style="--",
+            #              single_file=True,
+            #              incl_label=False,
+            #              alpha=1.)
+            #
+            #     format_figure(figure,
+            #                   f"Overburden Models\n"
+            #                   f"MUN Residual Calculation [{conductance} Overburden with Plate 1, Contact]",
+            #                   [mun_comb_con_file1],
+            #                   min_ch,
+            #                   max_ch,
+            #                   extra_handles=['-', '--'],
+            #                   extra_labels=["Modelled", "Residual"])
+            #
+            #     pdf.savefig(figure, orientation='landscape')
+            #     clear_axes(axes)
+            #     log_scale(x_ax_log, z_ax_log)
+            #
+            #     """Plate 2 contact"""
+            #     plot_mun(axes,
+            #              mun_comb_con_file2,
+            #              min_ch,
+            #              max_ch,
+            #              ch_step=ch_step,
+            #              name="Modelled",
+            #              line_color=None,
+            #              line_style="-",
+            #              single_file=True,
+            #              incl_label=True,
+            #              alpha=1.)
+            #
+            #     plot_mun(axes,
+            #              mun_plate_2_residual_con,
+            #              min_ch,
+            #              max_ch,
+            #              ch_step=ch_step,
+            #              name="Residual",
+            #              line_color=None,
+            #              line_style="--",
+            #              single_file=True,
+            #              incl_label=False,
+            #              alpha=1.)
+            #
+            #     format_figure(figure,
+            #                   f"Overburden Models\n"
+            #                   f"MUN Residual Calculation [{conductance} Overburden with Plate 2, Contact]",
+            #                   [mun_comb_con_file1],
+            #                   min_ch,
+            #                   max_ch,
+            #                   extra_handles=['-', '--'],
+            #                   extra_labels=["Modelled", "Residual"])
+            #     pdf.savefig(figure, orientation='landscape')
+            #     clear_axes(axes)
+            #     log_scale(x_ax_log, z_ax_log)
 
-            """Plate 2 contact"""
-            plot_maxwell(axes, maxwell_plate_2_residual_con, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name=f"Maxwell", station_shift=0, data_scaling=1e-6)
-            plot_mun(axes, mun_plate_2_residual_con, colors.get("MUN"), min_ch, max_ch, name=f"MUN", station_shift=0, alpha=0.9)
-            format_figure(figure, f"{conductance} Overburden + Plate 2 Residual (Contact)", [maxwell_plate_2_residual_con, mun_plate_2_residual_con], min_ch, max_ch)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            def plot_residual_comparison(ch_step=1):
+                print(f">> Plotting residual response ({conductance})")
+
+                plot_maxwell(axes,
+                             maxwell_plate_1_residual_sep,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name=f"Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
+
+                plot_mun(axes,
+                         mun_plate_1_residual_sep,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name=f"MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=1.)
+
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Residual [{conductance} Overburden with Plate 1, Separated]",
+                              [maxwell_plate_1_residual_sep,
+                               mun_plate_1_residual_sep],
+                              min_ch,
+                              max_ch,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
+
+                """Plate 2 with separation"""
+                plot_maxwell(axes,
+                             maxwell_plate_2_residual_sep,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name=f"Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
+
+                plot_mun(axes,
+                         mun_plate_2_residual_sep,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name=f"MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=1.)
+
+                format_figure(figure,
+                              f"Overburden Models\nResidual [{conductance} Overburden with Plate 2, Separated]",
+                              [maxwell_plate_2_residual_sep,
+                               mun_plate_2_residual_sep],
+                              min_ch,
+                              max_ch,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
+
+                """Plate 1 contact"""
+                plot_maxwell(axes,
+                             maxwell_plate_1_residual_con,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name=f"Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
+
+                plot_mun(axes,
+                         mun_plate_1_residual_con,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name=f"MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=1.)
+
+                format_figure(figure,
+                              f"Overburden Models\nResidual [{conductance} Overburden with Plate 1, Contact]",
+                              [maxwell_plate_1_residual_con,
+                               mun_plate_1_residual_con],
+                              min_ch,
+                              max_ch,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
+
+                """Plate 2 contact"""
+                plot_maxwell(axes,
+                             maxwell_plate_2_residual_con,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name=f"Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
+
+                plot_mun(axes,
+                         mun_plate_2_residual_con,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name=f"MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=1.)
+
+                format_figure(figure,
+                              f"Overburden Models\nResidual [{conductance} Overburden with Plate 2, Contact]",
+                              [maxwell_plate_2_residual_con,
+                               mun_plate_2_residual_con],
+                              min_ch,
+                              max_ch,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
+
+            """Compare residual/mutual inductance"""
+            out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Residual.PDF")
+            with PdfPages(out_pdf) as pdf:
+
+                for conductance in ["1S", "10S"]:
+                    maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
+                    mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
+
+                    maxwell_comb_sep_file1 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
+                    maxwell_comb_sep_file2 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
+                    maxwell_comb_con_file1 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
+                    maxwell_comb_con_file2 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
+
+                    mun_comb_sep_file1 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
+                    mun_comb_sep_file2 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
+                    mun_comb_con_file1 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
+                    mun_comb_con_file2 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
+
+                    maxwell_plate_1_residual_sep = calc_residual(maxwell_comb_sep_file1, maxwell_ob_file, maxwell_plate1_file)
+                    maxwell_plate_2_residual_sep = calc_residual(maxwell_comb_sep_file2, maxwell_ob_file, maxwell_plate2_file)
+                    maxwell_plate_1_residual_con = calc_residual(maxwell_comb_con_file1, maxwell_ob_file, maxwell_plate1_file)
+                    maxwell_plate_2_residual_con = calc_residual(maxwell_comb_con_file2, maxwell_ob_file, maxwell_plate2_file)
+                    mun_plate_1_residual_sep = calc_residual(mun_comb_sep_file1, mun_ob_file, mun_plate1_file)
+                    mun_plate_2_residual_sep = calc_residual(mun_comb_sep_file2, mun_ob_file, mun_plate2_file)
+                    mun_plate_1_residual_con = calc_residual(mun_comb_con_file1, mun_ob_file, mun_plate1_file)
+                    mun_plate_2_residual_con = calc_residual(mun_comb_con_file2, mun_ob_file, mun_plate2_file)
+
+                    # plot_maxwell_residual(ch_step=ch_step)
+                    # plot_mun_residual(ch_step=ch_step)
+                    plot_residual_comparison(ch_step=ch_step)
+            os.startfile(out_pdf)
 
         def plot_enhancement(ch_step=1):
             """
             Compare Maxwell and MUN plate enhancement
             """
-            print(f">> Plotting enhancement ({conductance})")
 
-            plot_maxwell(axes, maxwell_plate_1_enhance_sep, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Maxwell", line_style='-', data_scaling=1e-6)
-            plot_mun(axes, mun_plate_1_enhance_sep, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", line_style='-', alpha=0.9)
-            format_figure(figure, f"Enhanced Plate Response - {conductance} Overburden + Plate 1", [maxwell_plate_1_enhance_sep, mun_plate_1_enhance_sep], min_ch, max_ch, b_field=False, incl_legend=False)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            def calc_enhancement(combined_file, ob_file, plate_file):
+                # Works for both MUN and Maxwell
+                print(f"Calculating enhancement for {', '.join([f.filepath.name for f in [combined_file, ob_file, plate_file]])}")
+                enhance_file = copy.deepcopy(combined_file)
+                channels = [f'CH{num}' for num in range(1, len(ob_file.ch_times) + 1)]
 
-            plot_maxwell(axes, maxwell_plate_2_enhance_sep, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Maxwell", line_style='-', data_scaling=1e-6)
-            plot_mun(axes, mun_plate_2_enhance_sep, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", line_style='-', alpha=0.9)
-            format_figure(figure, f"Enhanced Plate Response - {conductance} Overburden + Plate 2", [maxwell_plate_2_enhance_sep, mun_plate_2_enhance_sep], min_ch, max_ch, b_field=False, incl_legend=False)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                enhance_data = combined_file.data.loc[:, channels] - ob_file.data.loc[:, channels]
+                enhance_file.data.loc[:, channels] = enhance_data
+                return enhance_file
 
-            plot_maxwell(axes, maxwell_plate_1_enhance_con, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Maxwell", line_style='-', data_scaling=1e-6)
-            plot_mun(axes, mun_plate_1_enhance_con, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", line_style='-', alpha=0.9)
-            format_figure(figure, f"Enhanced Plate Response - {conductance} Overburden + Plate 1", [maxwell_plate_1_enhance_con, mun_plate_1_enhance_con], min_ch, max_ch, b_field=False, incl_legend=False)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+            def plot_enhancement_comparison(ch_step=1):
+                """Compare plate enhancement"""
+                plot_maxwell(axes,
+                             maxwell_plate_1_enhance_sep,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name=f"Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
 
-            plot_maxwell(axes, maxwell_plate_2_enhance_con, colors.get("Maxwell"), min_ch, max_ch, ch_step=ch_step, name="Maxwell", line_style='-', data_scaling=1e-6)
-            plot_mun(axes, mun_plate_2_enhance_con, colors.get("MUN"), min_ch, max_ch, ch_step=ch_step, name="MUN", line_style='-', alpha=0.9)
-            format_figure(figure, f"Enhanced Plate Response - {conductance} Overburden + Plate 2", [maxwell_plate_2_enhance_con, mun_plate_2_enhance_con], min_ch, max_ch, b_field=False, incl_legend=False)
-            pdf.savefig(figure, orientation='landscape')
-            clear_axes(axes)
-            log_scale(x_ax_log, z_ax_log)
+                plot_mun(axes,
+                         mun_plate_1_enhance_sep,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name=f"MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=1.)
+
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Plate Enhancement (Overburden Response Substracted) [{conductance} Overburden with Plate 1, Separated]",
+                              [maxwell_plate_1_enhance_sep,
+                               mun_plate_1_enhance_sep],
+                              min_ch,
+                              max_ch,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
+
+                """Plate 2 with separation"""
+                plot_maxwell(axes,
+                             maxwell_plate_2_enhance_sep,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name=f"Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
+
+                plot_mun(axes,
+                         mun_plate_2_enhance_sep,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name=f"MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=1.)
+
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Plate Enhancement (Overburden Response Substracted) [{conductance} Overburden with Plate 2, Separated]",
+                              [maxwell_plate_2_enhance_sep,
+                               mun_plate_2_enhance_sep],
+                              min_ch,
+                              max_ch,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
+
+                """Plate 1 contact"""
+                plot_maxwell(axes,
+                             maxwell_plate_1_enhance_con,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name=f"Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
+
+                plot_mun(axes,
+                         mun_plate_1_enhance_con,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name=f"MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=1.)
+
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Plate Enhancement (Overburden Response Substracted) [{conductance} Overburden with Plate 1, Contact]",
+                              [maxwell_plate_1_enhance_con,
+                               mun_plate_1_enhance_con],
+                              min_ch,
+                              max_ch,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
+
+                """Plate 2 contact"""
+                plot_maxwell(axes,
+                             maxwell_plate_2_enhance_con,
+                             min_ch,
+                             max_ch,
+                             ch_step=ch_step,
+                             name=f"Maxwell",
+                             line_color=None,
+                             line_style=styles.get("Maxwell"),
+                             single_file=True,
+                             incl_label=True,
+                             data_scaling=1e-6,
+                             alpha=1.)
+
+                plot_mun(axes,
+                         mun_plate_2_enhance_con,
+                         min_ch,
+                         max_ch,
+                         ch_step=ch_step,
+                         name=f"MUN",
+                         line_color=None,
+                         line_style=styles.get("MUN"),
+                         single_file=True,
+                         incl_label=False,
+                         alpha=1.)
+
+                format_figure(figure,
+                              f"Overburden Models\n"
+                              f"Plate Enhancement (Overburden Response Substracted) [{conductance} Overburden with Plate 2, Contact]",
+                              [maxwell_plate_2_enhance_con,
+                               mun_plate_2_enhance_con],
+                              min_ch,
+                              max_ch,
+                              incl_legend=True,
+                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
+                              extra_labels=["Maxwell", "MUN"])
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale(x_ax_log, z_ax_log)
+
+            out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Enhancement.PDF")
+            with PdfPages(out_pdf) as pdf:
+
+                for conductance in ["1S", "10S"]:
+                    print(f">> Plotting enhancement ({conductance})")
+                    maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
+                    mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
+
+                    maxwell_comb_sep_file1 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
+                    maxwell_comb_sep_file2 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
+                    maxwell_comb_con_file1 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
+                    maxwell_comb_con_file2 = TEMFile().parse(
+                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
+
+                    mun_comb_sep_file1 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
+                    mun_comb_sep_file2 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
+                    mun_comb_con_file1 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
+                    mun_comb_con_file2 = MUNFile().parse(
+                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
+
+                    maxwell_plate_1_enhance_sep = calc_enhancement(maxwell_comb_sep_file1, maxwell_ob_file, maxwell_plate1_file)
+                    maxwell_plate_2_enhance_sep = calc_enhancement(maxwell_comb_sep_file2, maxwell_ob_file, maxwell_plate2_file)
+                    maxwell_plate_1_enhance_con = calc_enhancement(maxwell_comb_con_file1, maxwell_ob_file, maxwell_plate1_file)
+                    maxwell_plate_2_enhance_con = calc_enhancement(maxwell_comb_con_file2, maxwell_ob_file, maxwell_plate2_file)
+                    mun_plate_1_enhance_sep = calc_enhancement(mun_comb_sep_file1, mun_ob_file, mun_plate1_file)
+                    mun_plate_2_enhance_sep = calc_enhancement(mun_comb_sep_file2, mun_ob_file, mun_plate2_file)
+                    mun_plate_1_enhance_con = calc_enhancement(mun_comb_con_file1, mun_ob_file, mun_plate1_file)
+                    mun_plate_2_enhance_con = calc_enhancement(mun_comb_con_file2, mun_ob_file, mun_plate2_file)
+
+                    plot_enhancement_comparison(ch_step=ch_step)
+            os.startfile(out_pdf)
 
         figure, ((x_ax, x_ax_log), (z_ax, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='col', sharey='col')
         axes = [x_ax, z_ax, x_ax_log, z_ax_log]
         figure.set_size_inches((11 * 1.33, 8.5 * 1.33))
         log_scale(x_ax_log, z_ax_log)
-        rainbow_colors = cm.rainbow(np.linspace(0, 1, (44 - 21) + 1))
 
         maxwell_folder = sample_files.joinpath(r"Overburden\Maxwell\Overburden+Conductor Revised")
         assert maxwell_folder.is_dir(), f"{maxwell_folder} is not a directory."
@@ -3154,160 +4086,10 @@ if __name__ == '__main__':
         mun_plate1_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate250_dBdt.DAT"))
         mun_plate2_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate50_dBdt.DAT"))
 
-        plot_overburden(ch_step=channel_step)
-        #
-        # """Effects of plate contact"""
-        # out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Effects of Plate Contact.PDF")
-        # with PdfPages(out_pdf) as pdf:
-        #
-        #     for conductance in ["1S", "10S"]:
-        #         maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
-        #         mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
-        #
-        #         maxwell_comb_sep_file1 = TEMFile().parse(
-        #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
-        #         maxwell_comb_sep_file2 = TEMFile().parse(
-        #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
-        #         maxwell_comb_con_file1 = TEMFile().parse(
-        #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
-        #         maxwell_comb_con_file2 = TEMFile().parse(
-        #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
-        #
-        #         mun_comb_sep_file1 = MUNFile().parse(
-        #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
-        #         mun_comb_sep_file2 = MUNFile().parse(
-        #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
-        #         mun_comb_con_file1 = MUNFile().parse(
-        #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
-        #         mun_comb_con_file2 = MUNFile().parse(
-        #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
-        #
-        #         channels = [f'CH{num}' for num in range(1, 45 - 21 + 1)]
-        #         maxwell_plate1_diff = copy.deepcopy(maxwell_comb_sep_file1)
-        #         maxwell_plate2_diff = copy.deepcopy(maxwell_comb_sep_file2)
-        #         maxwell_plate1_diff.data.loc[:, channels] = maxwell_comb_con_file1.data.loc[:, channels] - maxwell_comb_sep_file1.data.loc[:, channels]
-        #         maxwell_plate2_diff.data.loc[:, channels] = maxwell_comb_con_file2.data.loc[:, channels] - maxwell_comb_sep_file2.data.loc[:, channels]
-        #
-        #         mun_plate1_diff = copy.deepcopy(mun_comb_sep_file1)
-        #         mun_plate2_diff = copy.deepcopy(mun_comb_sep_file2)
-        #         mun_plate1_diff.data.loc[:, channels] = mun_comb_con_file1.data.loc[:, channels] - mun_comb_sep_file1.data.loc[:, channels]
-        #         mun_plate2_diff.data.loc[:, channels] = mun_comb_con_file2.data.loc[:, channels] - mun_comb_sep_file2.data.loc[:, channels]
-        #
-        #         plot_contact_effect(ch_step=channel_step)
-        # os.startfile(out_pdf)
-        #
-        # """Mutual Inductance"""
-        # out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Mutual Inductance.PDF")
-        # with PdfPages(out_pdf) as pdf:
-        #
-        #     for conductance in ["1S", "10S"]:
-        #         maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
-        #         mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
-        #
-        #         maxwell_comb_sep_file1 = TEMFile().parse(
-        #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
-        #         maxwell_comb_sep_file2 = TEMFile().parse(
-        #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
-        #         maxwell_comb_con_file1 = TEMFile().parse(
-        #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
-        #         maxwell_comb_con_file2 = TEMFile().parse(
-        #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
-        #
-        #         mun_comb_sep_file1 = MUNFile().parse(
-        #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
-        #         mun_comb_sep_file2 = MUNFile().parse(
-        #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
-        #         mun_comb_con_file1 = MUNFile().parse(
-        #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
-        #         mun_comb_con_file2 = MUNFile().parse(
-        #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
-        #
-        #         maxwell_plate_1_calculated = calc_response(maxwell_ob_file, maxwell_plate1_file)
-        #         maxwell_plate_2_calculated = calc_response(maxwell_ob_file, maxwell_plate2_file)
-        #         mun_plate_1_calculated = calc_response(mun_ob_file, mun_plate1_file)
-        #         mun_plate_2_calculated = calc_response(mun_ob_file, mun_plate2_file)
-        #
-        #         plot_maxwell_calculation_comparison(ch_step=channel_step)
-        #         plot_mun_calculation_comparison(ch_step=channel_step)
-        # os.startfile(out_pdf)
-
-        """Compare residual/mutual inductance"""
-        out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Residual.PDF")
-        with PdfPages(out_pdf) as pdf:
-
-            for conductance in ["1S", "10S"]:
-                maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
-                mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
-
-                maxwell_comb_sep_file1 = TEMFile().parse(
-                    Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
-                maxwell_comb_sep_file2 = TEMFile().parse(
-                    Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
-                maxwell_comb_con_file1 = TEMFile().parse(
-                    Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
-                maxwell_comb_con_file2 = TEMFile().parse(
-                    Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
-
-                mun_comb_sep_file1 = MUNFile().parse(
-                    Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
-                mun_comb_sep_file2 = MUNFile().parse(
-                    Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
-                mun_comb_con_file1 = MUNFile().parse(
-                    Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
-                mun_comb_con_file2 = MUNFile().parse(
-                    Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
-
-                maxwell_plate_1_residual_sep = calc_residual(maxwell_comb_sep_file1, maxwell_ob_file, maxwell_plate1_file)
-                maxwell_plate_2_residual_sep = calc_residual(maxwell_comb_sep_file2, maxwell_ob_file, maxwell_plate2_file)
-                maxwell_plate_1_residual_con = calc_residual(maxwell_comb_con_file1, maxwell_ob_file, maxwell_plate1_file)
-                maxwell_plate_2_residual_con = calc_residual(maxwell_comb_con_file2, maxwell_ob_file, maxwell_plate2_file)
-                mun_plate_1_residual_sep = calc_residual(mun_comb_sep_file1, mun_ob_file, mun_plate1_file)
-                mun_plate_2_residual_sep = calc_residual(mun_comb_sep_file2, mun_ob_file, mun_plate2_file)
-                mun_plate_1_residual_con = calc_residual(mun_comb_con_file1, mun_ob_file, mun_plate1_file)
-                mun_plate_2_residual_con = calc_residual(mun_comb_con_file2, mun_ob_file, mun_plate2_file)
-
-                # plot_maxwell_residual(ch_step=channel_step)
-                # plot_mun_residual(ch_step=channel_step)
-                plot_residual(ch_step=channel_step)
-        os.startfile(out_pdf)
-
-        """Compare plate enhancement"""
-        out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Enhancement.PDF")
-        with PdfPages(out_pdf) as pdf:
-
-            for conductance in ["1S", "10S"]:
-                maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
-                mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
-
-                maxwell_comb_sep_file1 = TEMFile().parse(
-                    Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
-                maxwell_comb_sep_file2 = TEMFile().parse(
-                    Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
-                maxwell_comb_con_file1 = TEMFile().parse(
-                    Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
-                maxwell_comb_con_file2 = TEMFile().parse(
-                    Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
-
-                mun_comb_sep_file1 = MUNFile().parse(
-                    Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
-                mun_comb_sep_file2 = MUNFile().parse(
-                    Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
-                mun_comb_con_file1 = MUNFile().parse(
-                    Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
-                mun_comb_con_file2 = MUNFile().parse(
-                    Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
-
-                maxwell_plate_1_enhance_sep = calc_enhancement(maxwell_comb_sep_file1, maxwell_ob_file, maxwell_plate1_file)
-                maxwell_plate_2_enhance_sep = calc_enhancement(maxwell_comb_sep_file2, maxwell_ob_file, maxwell_plate2_file)
-                maxwell_plate_1_enhance_con = calc_enhancement(maxwell_comb_con_file1, maxwell_ob_file, maxwell_plate1_file)
-                maxwell_plate_2_enhance_con = calc_enhancement(maxwell_comb_con_file2, maxwell_ob_file, maxwell_plate2_file)
-                mun_plate_1_enhance_sep = calc_enhancement(mun_comb_sep_file1, mun_ob_file, mun_plate1_file)
-                mun_plate_2_enhance_sep = calc_enhancement(mun_comb_sep_file2, mun_ob_file, mun_plate2_file)
-                mun_plate_1_enhance_con = calc_enhancement(mun_comb_con_file1, mun_ob_file, mun_plate1_file)
-                mun_plate_2_enhance_con = calc_enhancement(mun_comb_con_file2, mun_ob_file, mun_plate2_file)
-
-                plot_enhancement(ch_step=channel_step)
-        os.startfile(out_pdf)
+        plot_overburden_and_plates(ch_step=channel_step)
+        plot_contact_effect(ch_step=channel_step)
+        plot_residual(ch_step=channel_step)
+        plot_enhancement(ch_step=channel_step)
 
         print(F"Plotting complete.")
 
