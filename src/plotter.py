@@ -1955,8 +1955,8 @@ if __name__ == '__main__':
         for ind, ch in enumerate(plotting_channels):
             if incl_label is True:
                 if single_file is True:
-                    # label = f"{file.ch_times[min_ch + ind]:.3f} ms"
-                    label = ch
+                    label = f"{file.ch_times[min_ch + (ind * ch_step)]:.3f}ms"
+                    # label = ch
                 else:
                     if ind == 0:
                         label = name
@@ -2017,7 +2017,8 @@ if __name__ == '__main__':
         for ind, ch in enumerate(plotting_channels):
             if incl_label is True:
                 if single_file is True:
-                    label = ch
+                    label = f"{file.ch_times[min_ch + ind]:.3f}ms"
+                    # label = ch
                 else:
                     if ind == 0:
                         label = name
@@ -2055,8 +2056,8 @@ if __name__ == '__main__':
                 if y_min and y_max:
                     ax.set_ylim([y_min, y_max])
 
-    def format_figure(figure, title, files, min_ch, max_ch, b_field=False, incl_legend=True, extra_handles=None,
-                      extra_labels=None):
+    def format_figure(figure, title, files, min_ch, max_ch, b_field=False, incl_footnote=False, incl_legend=True,
+                      extra_handles=None, extra_labels=None):
         for legend in figure.legends:
             legend.remove()
 
@@ -2088,17 +2089,18 @@ if __name__ == '__main__':
 
             figure.legend(handles, labels, loc='upper right')
 
-        footnote = ''
-        for file in files:
-            footnote += f"{get_filetype(file)} file plotting channels {min_ch}-{max_ch}" \
-                        f" ({file.ch_times[min_ch - 1]:.3f}ms-{file.ch_times[max_ch - 1]:.3f}ms).  "
+        if incl_footnote is True:
+            footnote = ''
+            for file in files:
+                footnote += f"{get_filetype(file)} file plotting channels {min_ch}-{max_ch}" \
+                            f" ({file.ch_times[min_ch - 1]:.3f}ms-{file.ch_times[max_ch - 1]:.3f}ms).  "
 
-        # Add the footnote
-        z_ax.text(0.995, 0.01, footnote,
-                  ha='right',
-                  va='bottom',
-                  size=6,
-                  transform=figure.transFigure)
+            # Add the footnote
+            z_ax.text(0.995, 0.01, footnote,
+                      ha='right',
+                      va='bottom',
+                      size=6,
+                      transform=figure.transFigure)
 
     def get_filetype(file_object):
         if isinstance(file_object, TEMFile):
@@ -2856,7 +2858,6 @@ if __name__ == '__main__':
                                   "Overburden Models\n" + title, [maxwell_file, mun_file],
                                   min_ch,
                                   max_ch,
-                                  b_field=False,
                                   incl_legend=True,
                                   extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
                                   extra_labels=["Maxwell", "MUN"])
@@ -2896,7 +2897,6 @@ if __name__ == '__main__':
                               f"Overburden Models\n{conductance} Overburden Only", [maxwell_ob_file, mun_ob_file],
                               min_ch,
                               max_ch,
-                              b_field=False,
                               incl_legend=True,
                               extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
                               extra_labels=["Maxwell", "MUN"])
@@ -2951,7 +2951,6 @@ if __name__ == '__main__':
                               [maxwell_comb_sep_file1],
                               min_ch,
                               max_ch,
-                              b_field=False,
                               incl_legend=True,
                               extra_handles=["--", "-"],
                               extra_labels=["Separated", "Contact"])
@@ -2989,7 +2988,6 @@ if __name__ == '__main__':
                               [maxwell_comb_sep_file2],
                               min_ch,
                               max_ch,
-                              b_field=False,
                               incl_legend=True,
                               extra_handles=["--", "-"],
                               extra_labels=["Separated", "Contact"])
@@ -3026,7 +3024,6 @@ if __name__ == '__main__':
                               [mun_comb_sep_file1],
                               min_ch,
                               max_ch,
-                              b_field=False,
                               incl_legend=True,
                               extra_handles=["--", "-"],
                               extra_labels=["Separated", "Contact"])
@@ -3061,7 +3058,6 @@ if __name__ == '__main__':
                               [mun_comb_sep_file2],
                               min_ch,
                               max_ch,
-                              b_field=False,
                               incl_legend=True,
                               extra_handles=["--", "-"],
                               extra_labels=["Separated", "Contact"])
@@ -3104,7 +3100,6 @@ if __name__ == '__main__':
                                mun_plate1_diff],
                               min_ch,
                               max_ch,
-                              b_field=False,
                               extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
                               extra_labels=["Maxwell", "MUN"])
 
@@ -3143,7 +3138,6 @@ if __name__ == '__main__':
                               [maxwell_plate2_diff, mun_plate2_diff],
                               min_ch,
                               max_ch,
-                              b_field=False,
                               extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
                               extra_labels=["Maxwell", "MUN"])
 
@@ -3858,11 +3852,21 @@ if __name__ == '__main__':
             def calc_enhancement(combined_file, ob_file, plate_file):
                 # Works for both MUN and Maxwell
                 print(f"Calculating enhancement for {', '.join([f.filepath.name for f in [combined_file, ob_file, plate_file]])}")
-                enhance_file = copy.deepcopy(combined_file)
+                enhance_file = copy.deepcopy(plate_file)
                 channels = [f'CH{num}' for num in range(1, len(ob_file.ch_times) + 1)]
 
                 enhance_data = combined_file.data.loc[:, channels] - ob_file.data.loc[:, channels]
                 enhance_file.data.loc[:, channels] = enhance_data
+                if isinstance(plate_file, TEMFile):
+                    global count
+                    if count == 0 or count == 1:
+                        sep = "Separated"
+                    else:
+                        sep = "Contact"
+                    filepath = enhance_file.filepath.parent.with_name(enhance_file.filepath.stem +
+                                                                      f" ({sep}, {conductance} overburden enhancement).TEM")
+                    count += 1
+                    enhance_file.save(filepath=filepath)
                 return enhance_file
 
             def plot_enhancement_comparison(ch_step=1):
@@ -4056,6 +4060,8 @@ if __name__ == '__main__':
                     mun_comb_con_file2 = MUNFile().parse(
                         Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
 
+                    global count
+                    count = 0
                     maxwell_plate_1_enhance_sep = calc_enhancement(maxwell_comb_sep_file1, maxwell_ob_file, maxwell_plate1_file)
                     maxwell_plate_2_enhance_sep = calc_enhancement(maxwell_comb_sep_file2, maxwell_ob_file, maxwell_plate2_file)
                     maxwell_plate_1_enhance_con = calc_enhancement(maxwell_comb_con_file1, maxwell_ob_file, maxwell_plate1_file)
@@ -4065,8 +4071,8 @@ if __name__ == '__main__':
                     mun_plate_1_enhance_con = calc_enhancement(mun_comb_con_file1, mun_ob_file, mun_plate1_file)
                     mun_plate_2_enhance_con = calc_enhancement(mun_comb_con_file2, mun_ob_file, mun_plate2_file)
 
-                    plot_enhancement_comparison(ch_step=ch_step)
-            os.startfile(out_pdf)
+                    # plot_enhancement_comparison(ch_step=ch_step)
+            # os.startfile(out_pdf)
 
         figure, ((x_ax, x_ax_log), (z_ax, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='col', sharey='col')
         axes = [x_ax, z_ax, x_ax_log, z_ax_log]
@@ -4079,16 +4085,16 @@ if __name__ == '__main__':
         assert mun_folder.is_dir(), f"{mun_folder} is not a directory."
 
         min_ch, max_ch = 21, 44
-        channel_step = 1
+        channel_step = 2
 
         maxwell_plate1_file = TEMFile().parse(Path(maxwell_folder).joinpath(r"Plate #1 Only - 51m.TEM"))
         maxwell_plate2_file = TEMFile().parse(Path(maxwell_folder).joinpath(r"Plate #2 Only - 51m.TEM"))
         mun_plate1_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate250_dBdt.DAT"))
         mun_plate2_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate50_dBdt.DAT"))
 
-        plot_overburden_and_plates(ch_step=channel_step)
-        plot_contact_effect(ch_step=channel_step)
-        plot_residual(ch_step=channel_step)
+        # plot_overburden_and_plates(ch_step=channel_step)
+        # plot_contact_effect(ch_step=channel_step)
+        # plot_residual(ch_step=channel_step)
         plot_enhancement(ch_step=channel_step)
 
         print(F"Plotting complete.")

@@ -1,4 +1,5 @@
 import re
+import os
 from pathlib import Path
 
 import numpy as np
@@ -217,6 +218,7 @@ class TEMFile:
 
     def __init__(self):
         self.filepath = None
+        self.content = ''
 
         self.line = ''
         self.config = ''
@@ -251,13 +253,13 @@ class TEMFile:
 
         print(f"Parsing {self.filepath.name}")
         with open(filepath, 'r') as file:
-            content = file.read()
-            split_content = re.sub(' &', '', content).split('\n')
+            self.content = file.read()
+            split_content = re.sub(' &', '', self.content).split('\n')
 
-        if re.search(r"LOOP:", content):
-            header = content.split(r"LOOP:")[0].split("\n")[1:]
+        if re.search(r"LOOP:", self.content):
+            header = self.content.split(r"LOOP:")[0].split("\n")[1:]
         else:
-            header = content.split(r"/TIMES(ms)")[0].split("\n")[1:]
+            header = self.content.split(r"/TIMES(ms)")[0].split("\n")[1:]
         header = np.concatenate([h.split() for h in header])
         header_dict = {}
         for match in header:
@@ -283,11 +285,11 @@ class TEMFile:
             self.loop_coords = loop_coords
 
         # Channel times and widths
-        ch_times = np.array(content.split(r'/TIMES(')[1].split('\n')[0][4:].split(','), dtype=float)
-        ch_widths = np.array(content.split(r'/TIMESWIDTH(')[1].split('\n')[0][4:].split(','), dtype=float)
+        ch_times = np.array(self.content.split(r'/TIMES(')[1].split('\n')[0][4:].split(','), dtype=float)
+        ch_widths = np.array(self.content.split(r'/TIMESWIDTH(')[1].split('\n')[0][4:].split(','), dtype=float)
 
         # Data
-        top_section, data_section = content.split(r'/PROFILEX:')
+        top_section, data_section = self.content.split(r'/PROFILEX:')
         data_columns = top_section.split('\n')[-2].split()
         data_match = data_section.split('\n')[1:]
         data = pd.DataFrame([match.split() for match in data_match[:-1]], columns=data_columns)
@@ -335,11 +337,30 @@ class TEMFile:
         mn = data.min().min()
         return mn, mx
 
+    def save(self, filepath=None):
+        if filepath is None:
+            filepath = self.filepath
+
+        print(F"Saving new TEM file to {filepath}.")
+
+        header = self.content.split(r"/PROFILEX")[0].split("\n")[-2]
+        profile_ex = re.search(r"(/PROFILEX:\w+)", self.content).group(1)
+        # Remove first header_str character because pandas to_string creates the first column with space 14 but rest 15.
+        header_str = ''.join([f"{h:>15}" for h in header.split()])[1:]
+        data_str = self.data.to_string(header=False, index=False, col_space=14, justify='right')
+
+        self.content = self.content.split(header)[0]
+        self.content += f"{header_str}\n{profile_ex}\n{data_str}"
+
+        with open(filepath, "w+") as file:
+            file.write(self.content)
+        # os.startfile(str(filepath))
+
 
 if __name__ == '__main__':
     tem = TEMFile()
 
     sample_files = Path(__file__).parents[2].joinpath('sample_files')
-    file = sample_files.joinpath(r'Two-way induction\300x100\100S\100S - Loop=0.TEM')
+    file = sample_files.joinpath(r'Overburden\Maxwell\Overburden+Conductor\Overburden - Plate #1 - 1m Spacing.TEM')
     tem_file = tem.parse(file)
-    tem_file.get_range()
+    tem_file.save(filepath=file.with_name("Overburden - Plate #1 - 1m Spacing Test Save.TEM"))
