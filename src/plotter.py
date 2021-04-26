@@ -1996,7 +1996,7 @@ if __name__ == '__main__':
 
     def plot_mun(axes, file, ch_start, ch_end, ch_step=1, name="", station_shift=0, data_scaling=1., alpha=1.,
                  line_color=None, ls=None, x_min=None, x_max=None, y_min=None, y_max=None, single_file=False,
-                 incl_label=True):
+                 incl_label=True, filter=False):
         x_ax, z_ax, x_ax_log, z_ax_log = axes
         rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
         x_ax.set_prop_cycle(cycler('color', rainbow_colors))
@@ -2031,8 +2031,10 @@ if __name__ == '__main__':
             zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
             xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
 
-            zz_filt = savgol_filter(zz, 11, 3)
-            xx_filt = savgol_filter(xx, 11, 3)
+            if filter is True:
+                zz = savgol_filter(zz, 21, 3)
+                xx = savgol_filter(xx, 21, 3)
+
             for ax in [x_ax, x_ax_log]:
                 ax.plot(x, xx,
                         color=line_color,
@@ -2040,13 +2042,6 @@ if __name__ == '__main__':
                         # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                         label=label,
                         ls=ls,
-                        zorder=1)
-                ax.plot(x, xx_filt,
-                        color=line_color,
-                        alpha=alpha,
-                        # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
-                        label=label,
-                        ls="-",
                         zorder=1)
             for ax in [z_ax, z_ax_log]:
                 ax.plot(x, zz,
@@ -2056,12 +2051,71 @@ if __name__ == '__main__':
                         label=label,
                         ls=ls,
                         zorder=1)
-                ax.plot(x, zz_filt,
+
+            for ax in axes:
+                if x_min and x_max:
+                    ax.set_xlim([x_min, x_max])
+                else:
+                    ax.set_xlim([x.min(), x.max()])
+                if y_min and y_max:
+                    ax.set_ylim([y_min, y_max])
+
+    def plot_plate(axes, file, ch_start, ch_end, ch_step=1, name="", station_shift=0, data_scaling=1., alpha=1.,
+                 line_color=None, ls=None, x_min=None, x_max=None, y_min=None, y_max=None, single_file=False,
+                 incl_label=True, filter=False):
+        x_ax, z_ax, x_ax_log, z_ax_log = axes
+        rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
+        x_ax.set_prop_cycle(cycler('color', rainbow_colors))
+        x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+        z_ax.set_prop_cycle(cycler('color', rainbow_colors))
+        z_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+
+        x_data = file.data[file.data.Component == "X"]
+        z_data = file.data[file.data.Component == "Z"]
+
+        channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
+        min_ch = ch_start - 1
+        max_ch = min(ch_end - 1, len(channels) - 1)
+        plotting_channels = channels[min_ch: max_ch + 1: ch_step]
+        if single_file is True:
+            line_color = None
+
+        for ind, ch in enumerate(plotting_channels):
+            if incl_label is True:
+                if single_file is True:
+                    label = f"{file.ch_times[min_ch + ind]:.3f}ms"
+                    # label = ch
+                else:
+                    if ind == 0:
+                        label = name
+                    else:
+                        label = None
+            else:
+                label = None
+
+            x = z_data.Station.astype(float) + station_shift
+            zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
+            xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
+
+            if filter is True:
+                zz = savgol_filter(zz, 21, 3)
+                xx = savgol_filter(xx, 21, 3)
+
+            for ax in [x_ax, x_ax_log]:
+                ax.plot(x, xx,
                         color=line_color,
                         alpha=alpha,
                         # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                         label=label,
-                        ls="-",
+                        ls=ls,
+                        zorder=1)
+            for ax in [z_ax, z_ax_log]:
+                ax.plot(x, zz,
+                        color=line_color,
+                        alpha=alpha,
+                        # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
+                        label=label,
+                        ls=ls,
                         zorder=1)
 
             for ax in axes:
@@ -2173,6 +2227,49 @@ if __name__ == '__main__':
         print(F"Minimum Y: {min(mins):.2f}\nMaximum Y: {max(maxes):.2f}.")
         return min(mins), max(maxes)
 
+    def get_residual_file(combined_file, folder, plotting_files):
+        """
+        Remove the sum of the data from the individual plate files that make up a combined model from
+        the original file (combined_file)
+        :param combined_file: file object
+        :param folder: Path object, filder which contains the base files
+        :param plotting_files: list, names of the files being plotted
+        """
+
+        def get_composite_base_files(file_obj, base_files):
+            """Return the individual plate files that are in the target file"""
+            plates = list(file_obj.filepath.stem)
+            composite_files = []
+            for base_file in base_files:
+                if base_file in plates:
+                    if isinstance(file_obj, TEMFile):
+                        composite_files.append(folder.joinpath(base_file).with_suffix(".TEM"))
+                    elif isinstance(file_obj, MUNFile):
+                        composite_files.append(folder.joinpath(base_file).with_suffix(".DAT"))
+                    else:
+                        raise TypeError(F"{base_file} is an invalid file object.")
+            print(f"Individual plate files in {file_obj.filepath.name}: {', '.join([b.name for b in composite_files])}.")
+            return composite_files
+
+        base_files = [f for f in plotting_files if len(f) == 1]
+        channels = [f"CH{num}" for num in range(1, len(combined_file.ch_times) + 1)]
+        residual_file = copy.deepcopy(combined_file)
+
+        composite_files = get_composite_base_files(combined_file, base_files)
+        print(f"Calculating the sum of the data from {', '.join([f.name for f in composite_files])}.")
+        for file in composite_files:
+            if file.suffix == ".TEM":
+                file_obj = TEMFile().parse(file)
+            elif file.suffix == ".DAT":
+                file_obj = MUNFile().parse(file)
+            else:
+                raise TypeError(F"{file.suffix} is not yet supported.")
+
+            residual_file.data.loc[:, channels] = residual_file.data.loc[:, channels] - \
+                                                  file_obj.data.loc[:, channels]
+
+        return residual_file
+
     def clear_axes(axes):
         for ax in axes:
             ax.clear()
@@ -2181,111 +2278,129 @@ if __name__ == '__main__':
         x_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
         z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
 
+    def get_runtime(t):
+        return f"{math.floor((time.time() - t) / 60):02.0d}:{(time.time() - t) % 60:02.0d}"
+
     def plot_aspect_ratio():
+        figure, ((x_ax, x_ax_log), (z_ax, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='col', sharey='col')
+        axes = [x_ax, z_ax, x_ax_log, z_ax_log]
+        figure.set_size_inches((11 * 1.33, 8.5 * 1.33))
+
+        maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
+        mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
+        plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
+        irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
+
+        global min_ch, max_ch, channel_step
+        min_ch, max_ch = 21, 21
+        channel_step = 1
+
         t = time.time()
-        tester = TestRunner()
-        tester.show()
 
-        with open(log_file, "a") as file:
-            file.write(f">>Plotting aspect ratio test results<<\n")
 
-            # # Maxwell
-            # maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
-            # tester.add_row(str(maxwell_dir), "Maxwell")
-            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
-            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
-            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
 
-            # MUN
-            mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
-            tester.add_row(str(mun_dir), "MUN")
-            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-200")
-            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
-            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+        # tester = TestRunner()
+        # tester.show()
+        #
+        # logging_file.write(f">>Plotting aspect ratio test results<<\n")
+        #
+        # # # Maxwell
+        # # maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
+        # # tester.add_row(str(maxwell_dir), "Maxwell")
+        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
+        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
+        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
+        #
+        # # MUN
+        # mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
+        # tester.add_row(str(mun_dir), "MUN")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-200")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+        #
+        # # # Plate
+        # # plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
+        # # tester.add_row(str(plate_dir), "PLATE")
+        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+        #
+        # # Peter
+        # irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
+        # tester.add_row(str(irap_dir), "IRAP")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
+        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
+        #
+        # """ Plotting """
+        # tester.plot_profiles_rbtn.setChecked(True)
+        #
+        # tester.custom_stations_cbox.setChecked(False)
+        # tester.y_cbox.setChecked(True)
+        # tester.test_name_edit.setText(r"Aspect Ratio")
+        # # tester.fixed_range_cbox.setChecked(True)
+        # tester.include_edit.setText("150")
+        # tester.include_edit.editingFinished.emit()
+        #
+        # # file.write(f"Plotting 150m plates (linear, all stations)\n")
+        # # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate.PDF"))
+        # # tester.output_filepath_edit.setText(pdf_file)
+        # # tester.print_pdf(from_script=True)
+        #
+        # logging_file.write(f"Plotting 150m plates (linear, stations 0-200)\n")
+        # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF"))
+        # tester.custom_stations_cbox.setChecked(True)
+        # tester.station_start_sbox.setValue(0)
+        # tester.station_end_sbox.setValue(200)
+        # tester.output_filepath_edit.setText(pdf_file)
+        # tester.print_pdf(from_script=True)
+        #
+        # # file.write(f"Plotting 600m plates (linear, all stations)\n")
+        # # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate.PDF"))
+        # # tester.custom_stations_cbox.setChecked(False)
+        # # tester.output_filepath_edit.setText(pdf_file)
+        # # tester.include_edit.setText("600")
+        # # tester.include_edit.editingFinished.emit()
+        # # tester.print_pdf(from_script=True)
+        #
+        # logging_file.write(f"Plotting 600m plates (linear, stations 0-200)\n")
+        # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF"))
+        # tester.custom_stations_cbox.setChecked(True)
+        # tester.output_filepath_edit.setText(pdf_file)
+        # tester.print_pdf(from_script=True)
+        #
+        # """ Log Y """
+        # tester.log_y_cbox.setChecked(True)
+        # tester.custom_stations_cbox.setChecked(False)
+        #
+        # # file.write(f"Plotting 150m plates (log, all stations)\n")
+        # # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate [LOG].PDF"))
+        # # tester.output_filepath_edit.setText(pdf_file)
+        # # tester.print_pdf(from_script=True)
+        #
+        # logging_file.write(f"Plotting 150m plates (log, stations 0-200)\n")
+        # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200) [LOG].PDF"))
+        # tester.custom_stations_cbox.setChecked(True)
+        # tester.station_start_sbox.setValue(0)
+        # tester.station_end_sbox.setValue(200)
+        # tester.output_filepath_edit.setText(pdf_file)
+        # tester.print_pdf(from_script=True)
+        #
+        # # file.write(f"Plotting 600m plates (log, all stations)\n")
+        # # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate [LOG].PDF"))
+        # # tester.custom_stations_cbox.setChecked(False)
+        # # tester.output_filepath_edit.setText(pdf_file)
+        # # tester.include_edit.setText("600")
+        # # tester.include_edit.editingFinished.emit()
+        # # tester.print_pdf(from_script=True)
+        #
+        # logging_file.write(f"Plotting 600m plates (log, stations 0-200)\n")
+        # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200) [LOG].PDF"))
+        # tester.custom_stations_cbox.setChecked(True)
+        # tester.output_filepath_edit.setText(pdf_file)
+        # tester.print_pdf(from_script=True)
 
-            # # Plate
-            # plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
-            # tester.add_row(str(plate_dir), "PLATE")
-            # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-
-            # Peter
-            irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
-            tester.add_row(str(irap_dir), "IRAP")
-            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-            tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-
-            """ Plotting """
-            tester.plot_profiles_rbtn.setChecked(True)
-
-            tester.custom_stations_cbox.setChecked(False)
-            tester.y_cbox.setChecked(True)
-            tester.test_name_edit.setText(r"Aspect Ratio")
-            # tester.fixed_range_cbox.setChecked(True)
-            tester.include_edit.setText("150")
-            tester.include_edit.editingFinished.emit()
-
-            # file.write(f"Plotting 150m plates (linear, all stations)\n")
-            # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate.PDF"))
-            # tester.output_filepath_edit.setText(pdf_file)
-            # tester.print_pdf(from_script=True)
-
-            file.write(f"Plotting 150m plates (linear, stations 0-200)\n")
-            pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF"))
-            tester.custom_stations_cbox.setChecked(True)
-            tester.station_start_sbox.setValue(0)
-            tester.station_end_sbox.setValue(200)
-            tester.output_filepath_edit.setText(pdf_file)
-            tester.print_pdf(from_script=True)
-
-            # file.write(f"Plotting 600m plates (linear, all stations)\n")
-            # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate.PDF"))
-            # tester.custom_stations_cbox.setChecked(False)
-            # tester.output_filepath_edit.setText(pdf_file)
-            # tester.include_edit.setText("600")
-            # tester.include_edit.editingFinished.emit()
-            # tester.print_pdf(from_script=True)
-
-            file.write(f"Plotting 600m plates (linear, stations 0-200)\n")
-            pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF"))
-            tester.custom_stations_cbox.setChecked(True)
-            tester.output_filepath_edit.setText(pdf_file)
-            tester.print_pdf(from_script=True)
-
-            """ Log Y """
-            tester.log_y_cbox.setChecked(True)
-            tester.custom_stations_cbox.setChecked(False)
-
-            # file.write(f"Plotting 150m plates (log, all stations)\n")
-            # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate [LOG].PDF"))
-            # tester.output_filepath_edit.setText(pdf_file)
-            # tester.print_pdf(from_script=True)
-
-            file.write(f"Plotting 150m plates (log, stations 0-200)\n")
-            pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200) [LOG].PDF"))
-            tester.custom_stations_cbox.setChecked(True)
-            tester.station_start_sbox.setValue(0)
-            tester.station_end_sbox.setValue(200)
-            tester.output_filepath_edit.setText(pdf_file)
-            tester.print_pdf(from_script=True)
-
-            # file.write(f"Plotting 600m plates (log, all stations)\n")
-            # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate [LOG].PDF"))
-            # tester.custom_stations_cbox.setChecked(False)
-            # tester.output_filepath_edit.setText(pdf_file)
-            # tester.include_edit.setText("600")
-            # tester.include_edit.editingFinished.emit()
-            # tester.print_pdf(from_script=True)
-
-            file.write(f"Plotting 600m plates (log, stations 0-200)\n")
-            pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200) [LOG].PDF"))
-            tester.custom_stations_cbox.setChecked(True)
-            tester.output_filepath_edit.setText(pdf_file)
-            tester.print_pdf(from_script=True)
-
-            print(f"Aspect ratio plot time: {math.floor((time.time() - t) / 60):02.0d}:{(time.time() - t) % 60:02.0d}")
-            file.write(f"Aspect ratio plot time: {math.floor((time.time() - t) / 60):02.0d}:{(time.time() - t) % 60:02.0d}\n")
+        print(f"Aspect ratio plot time: {get_runtime(t)}")
+        logging_file.write(f"Aspect ratio plot time: {get_runtime(t)}\n")
 
     def plot_two_way_induction():
         t = time.time()
@@ -3962,47 +4077,6 @@ if __name__ == '__main__':
 
     def plot_bentplate():
 
-        def get_residual_file(combined_file, folder):
-            """
-            Remove the sum of the data from the individual plate files that make up a combined model from
-            the original file (combined_file)
-            :param combined_file: file object
-            """
-
-            def get_composite_base_files(file_obj, base_files):
-                """Return the individual plate files that are in the target file"""
-                plates = list(file_obj.filepath.stem)
-                composite_files = []
-                for base_file in base_files:
-                    if base_file in plates:
-                        if isinstance(file_obj, TEMFile):
-                            composite_files.append(folder.joinpath(base_file).with_suffix(".TEM"))
-                        elif isinstance(file_obj, MUNFile):
-                            composite_files.append(folder.joinpath(base_file).with_suffix(".DAT"))
-                        else:
-                            raise TypeError(F"{base_file} is an invalid file object.")
-                print(f"Individual plate files in {file_obj.filepath.name}: {', '.join([b.name for b in composite_files])}.")
-                return composite_files
-
-            base_files = [f for f in single_plot_order if len(f) == 1]
-            channels = [f"CH{num}" for num in range(1, len(combined_file.ch_times) + 1)]
-            residual_file = copy.deepcopy(combined_file)
-
-            composite_files = get_composite_base_files(combined_file, base_files)
-            print(f"Calculating the sum of the data from {', '.join([f.name for f in composite_files])}.")
-            for file in composite_files:
-                if file.suffix == ".TEM":
-                    file_obj = TEMFile().parse(file)
-                elif file.suffix == ".DAT":
-                    file_obj = MUNFile().parse(file)
-                else:
-                    raise TypeError(F"{file.suffix} is not yet supported.")
-
-                residual_file.data.loc[:, channels] = residual_file.data.loc[:, channels] - \
-                                                      file_obj.data.loc[:, channels]
-
-            return residual_file
-
         def plot_model(model_name, title, pdf, max_folder, mun_folder, residual=False, y_min=None, y_max=None, ylabel=''):
             print(f"Searching for {model_name}.TEM")
             max_file = max_folder.joinpath(model_name).with_suffix(".TEM")
@@ -4040,7 +4114,7 @@ if __name__ == '__main__':
                 print(f"Plotting {mun_file.name}.")
                 dat_file = MUNFile().parse(mun_file)
                 if residual is True:
-                    dat_file = get_residual_file(dat_file, mun_folder)
+                    dat_file = get_residual_file(dat_file, mun_folder, single_plot_order)
                 files.append(dat_file)
                 log_scale(x_ax_log, z_ax_log)
                 plot_mun(axes, dat_file, min_ch, max_ch,
@@ -4187,8 +4261,8 @@ if __name__ == '__main__':
         figure.set_size_inches((11 * 1.33, 8.5 * 1.33))
 
         global min_ch, max_ch, channel_step
-        min_ch, max_ch = 21, 44
-        channel_step = 2
+        min_ch, max_ch = 21, 21
+        channel_step = 1
 
         single_plot_order = [
             "1",
@@ -4242,9 +4316,164 @@ if __name__ == '__main__':
         # mn, mx = mn * 1e-6, mx * 1e-6
         # plot_varying_conductances(fixed_y=False)
 
+    def test_savgol_filter():
+
+        def format_figure(figure, title, files, min_ch, max_ch, ylabel=''):
+            for legend in figure.legends:
+                legend.remove()
+
+            rainbow_colors = cm.jet(np.linspace(0, 1, (max_ch - min_ch) + 1))
+            x_ax, x_ax_log, z_ax, z_ax_log = figure.axes
+            # Set the labels
+            z_ax.set_xlabel(f"Station")
+            z_ax_log.set_xlabel(f"Station")
+            if ylabel:
+                for ax in figure.axes:
+                    ax.set_ylabel(ylabel)
+            else:
+                for ax in figure.axes:
+                    ax.set_ylabel(f"EM Response\n(nT/s)")
+
+            figure.suptitle(title)
+            x_ax.set_title(f"X Component")
+            z_ax.set_title(f"Z Component")
+            x_ax_log.set_title(f"X Component")
+            z_ax_log.set_title(f"Z Component")
+
+            # Create a legend from the plotted lines
+            lines, times = [], []
+            for i, ch in enumerate(range(min_ch, max_ch + 1)):
+                line = Line2D([0], [0], color=rainbow_colors[i], linestyle="-")
+                lines.append(line)
+                times.append(f"{files[0].ch_times[ch]:.3f}ms")
+            handles = lines
+            labels = times
+            ax_handles, ax_labels = z_ax.get_legend_handles_labels()
+            handles.extend(ax_handles)
+            labels.extend(ax_labels)
+
+            figure.legend(handles, labels, loc='upper right')
+
+        def plot_model(model_name, title, pdf, mun_folder, y_min=None, y_max=None, ylabel=''):
+            print(f"Searching for {model_name}.TEM")
+            mun_file = mun_folder.joinpath(model_name).with_suffix(".DAT")
+            file_times = None
+            files = []
+
+            if mun_file.is_file():
+                print(f"Plotting {mun_file.name}.")
+                dat_file = MUNFile().parse(mun_file)
+                residual_file = get_residual_file(dat_file, mun_folder, single_plot_order)
+                files.append(residual_file)
+
+                channel_tuples = list(zip(list(range(min_ch, max_ch + 1))[:-num_chs - 1: num_chs],
+                                          list(range(min_ch, max_ch + 1))[num_chs - 1:: num_chs]))
+                for chs in channel_tuples:
+                    print(F"Plotting channel {chs[0]}-{chs[-1]}.")
+                    # Plot the normal residual
+                    log_scale(x_ax_log, z_ax_log)
+                    plot_mun(axes, residual_file, chs[0], chs[-1],
+                             name="Original",
+                             ls=":",
+                             station_shift=0,
+                             data_scaling=1.,
+                             y_min=y_min,
+                             y_max=y_max,
+                             filter=False)
+
+                    # Plot the filtered residual
+                    log_scale(x_ax_log, z_ax_log)
+                    plot_mun(axes, residual_file, chs[0], chs[-1],
+                             name="Filtered",
+                             ls="-",
+                             station_shift=0,
+                             data_scaling=1.,
+                             y_min=y_min,
+                             y_max=y_max,
+                             filter=True)
+
+                    if file_times is None:
+                        file_times = dat_file.ch_times
+
+                    name = f"Savitzky–Golay Filter\nModel {title}, Channel {chs[0]}-{chs[-1]}"
+                    format_figure(figure, name, files, chs[0], chs[-1], ylabel=ylabel)
+                    pdf.savefig(figure, orientation='landscape')
+                    clear_axes(axes)
+            else:
+                print(F"MUN file {mun_file.name} not found.")
+                logging_file.write(F"MUN file {mun_file.name} not found.\n")
+
+        mun_folder_100S = sample_files.joinpath(r"Bent and Multiple Plates\MUN\100S Plates")
+        mun_folder_varying = sample_files.joinpath(r"Bent and Multiple Plates\MUN\Various Conductances")
+        assert all([mun_folder_100S.exists(), mun_folder_varying.exists()]), "One or more of the folders doesn't exist."
+        figure, ((x_ax, x_ax_log), (z_ax, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='col', sharey='col')
+        axes = [x_ax, z_ax, x_ax_log, z_ax_log]
+        figure.set_size_inches((11 * 1.33, 8.5 * 1.33))
+
+        global min_ch, max_ch
+        min_ch, max_ch = 21, 44
+        num_chs = 3
+
+        single_plot_order = [
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+        ]
+
+        combined_plot_order = [
+            "1_2",
+            "1+2",
+            "1_4",
+            "1+4",
+            "2_3",
+            "2+3",
+            "2_4",
+            "2+4",
+            "2_5",
+            "2+5",
+            "4_5",
+            "4+5",
+            "5_3",
+            "5+3",
+            "3_6",
+            "3+6",
+            "1_4_5",
+            "1+4+5",
+            "5_3_6",
+            "5+3+6",
+            "1_2_3",
+            "1+2+3",
+            "1_2_3_6",
+            "1+2+3+6",
+            "(1+2)_(3+6)",
+            "(1+2+3)_6",
+            "1_4_5_3_6",
+            "1+4+5+3+6",
+            "(1+4+5)_(3+6)",
+        ]
+
+        """ Plot residuals """
+        out_pdf = sample_files.joinpath(
+            r"Bent and Multiple Plates\Savitzky-Golay Filter.PDF")
+        with PdfPages(out_pdf) as pdf:
+            logging_file.write(f">>Savgol Filter Testing<<\n")
+            count = 0
+            print(f">>Savgol filter test")
+
+            combined_files = [f for f in combined_plot_order if len(f) > 1][:2]
+            for model in combined_files:
+                plot_model(model, model, pdf, mun_folder_100S,
+                           ylabel="Residual Response (nT/s)")
+                count += 1
+
+        os.startfile(out_pdf)
+
 
     # TODO Change "MUN" to "EM3D"
-    # plot_aspect_ratio()
+    plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
@@ -4252,7 +4481,8 @@ if __name__ == '__main__':
     # compare_maxwell_ribbons()
     # compare_step_on_b_with_theory()
     # plot_overburden()
-    plot_bentplate()
+    # plot_bentplate()
+    # test_savgol_filter()
 
     # tester = TestRunner()
     # tester.show()
@@ -4264,5 +4494,5 @@ if __name__ == '__main__':
     # tester.print_pdf()
 
     logging_file.close()
-    os.startfile(log_file_path)
+    # os.startfile(log_file_path)
     app.exec_()

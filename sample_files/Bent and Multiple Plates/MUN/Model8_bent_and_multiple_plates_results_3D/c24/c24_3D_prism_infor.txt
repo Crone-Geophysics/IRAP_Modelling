@@ -1,0 +1,2 @@
+c24: plate1 + plate4 + plate5
+Here, corresponding 3D prisms have a thickness of 2 m, therefore conductivity 100S/2m=50 S/m each. The 2 m thickness is made from meshing consideration.
