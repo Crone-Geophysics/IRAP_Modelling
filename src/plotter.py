@@ -64,9 +64,9 @@ quant_colors = np.nditer(np.array(plt.rcParams['axes.prop_cycle'].by_key()['colo
 # quant_colors = iter(plt.rcParams['axes.prop_cycle'].by_key()['color'])
 # color = iter(cm.tab10())
 
-options = {"Maxwell": "*.TEM", "MUN": "*.DAT", "IRAP": "*.DAT", "PLATE": "*.DAT"}
-colors = {"Maxwell": '#0000FF', "MUN": '#63DF48', "IRAP": "#000000", "PLATE": '#FF0000'}
-styles = {"Maxwell": '-', "MUN": ":", "IRAP": "--", "PLATE": '-.'}
+extensions = {"Maxwell": "*.TEM", "MUN": "*.DAT", "IRAP": "*.DAT", "PLATE": "*.DAT"}
+colors = {"Maxwell": '#0000FF', "MUN": '#43cc31', "IRAP": "#000000", "PLATE": '#FF0000'}
+styles = {"Maxwell": "-", "MUN": ":", "IRAP": "--", "PLATE": '-.'}
 
 
 class ColorButton(QPushButton):
@@ -1929,269 +1929,235 @@ if __name__ == '__main__':
 
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
 
-    # fem_file = sample_files.joinpath(r'Maxwell files\FEM\Horizontal Plate 100S Normalized.fem')
-    # tem_file = sample_files.joinpath(r'Aspect ratio\Maxwell\5x150A.TEM')
+    def plot_obj(ax_dict, file, ch_start, ch_end, ch_step=1, name="", station_shift=0,
+                 data_scaling=1., alpha=1., ls=None, lc=None, x_min=None, x_max=None, y_min=None, y_max=None,
+                 incl_label=True, filter=False):
 
-    def plot_max(axes, file, ch_start, ch_end, ch_step=1, name="", station_shift=0, single_file=False,
-                 data_scaling=1., alpha=1., line_color=None, ls=None, x_min=None, x_max=None,
-                 y_min=None, y_max=None, incl_label=True):
-        x_ax, z_ax, x_ax_log, z_ax_log = axes
         rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
-        x_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
-        z_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        z_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+        line_styles = ['-', '--', '-.', ':']
 
-        x_data = file.data[file.data.COMPONENT == "X"]
-        z_data = file.data[file.data.COMPONENT == "Z"]
+        x_ax, x_ax_log = ax_dict.get('X')
+        y_ax, y_ax_log = ax_dict.get('Y')
+        z_ax, z_ax_log = ax_dict.get('Z')
+        axes = [x_ax, x_ax_log, y_ax, y_ax_log, z_ax, z_ax_log]
 
-        channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+        for ax in axes:
+            ax.set_prop_cycle(cycler('color', rainbow_colors))
+            ax.set_prop_cycle(cycler('linestyle', line_styles))
+
+        if isinstance(file, TEMFile):
+            x_data = file.data[file.data.COMPONENT == "X"]
+            y_data = file.data[file.data.COMPONENT == "Y"]
+            z_data = file.data[file.data.COMPONENT == "Z"]
+            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+        elif isinstance(file, MUNFile):
+            x_data = file.data[file.data.Component == "X"]
+            y_data = file.data[file.data.Component == "Y"]
+            z_data = file.data[file.data.Component == "Z"]
+            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+        elif isinstance(file, PlateFFile):
+            x_data = file.data[file.data.Component == "X"]
+            y_data = file.data[file.data.Component == "Y"]
+            z_data = file.data[file.data.Component == "Z"]
+            channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
+        elif isinstance(file, IRAPFile):
+            x_data = file.data[file.data.Component == "X"]
+            y_data = file.data[file.data.Component == "Y"]
+            z_data = file.data[file.data.Component == "Z"]
+            channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
+        else:
+            raise ValueError(f"{file} is not a valid filetype.")
+
         min_ch = ch_start - 1
         max_ch = min(ch_end - 1, len(channels) - 1)
         plotting_channels = channels[min_ch: max_ch + 1: ch_step]
-        if single_file is True:
-            line_color = None
 
         for ind, ch in enumerate(plotting_channels):
             if incl_label is True:
-                if single_file is True:
-                    label = f"{file.ch_times[min_ch + (ind * ch_step)]:.3f}ms"
-                    # label = ch
+                if ind == 0:
+                    if not name:
+                        name = get_filetype(file)
+                    label = name
                 else:
-                    if ind == 0:
-                        label = name
-                    else:
-                        label = None
+                    label = None
             else:
                 label = None
 
-            x = z_data.STATION.astype(float) + station_shift
-            zz = z_data.loc[:, ch].astype(float) * data_scaling
+            if isinstance(file, TEMFile):
+                x = z_data.STATION.astype(float) + station_shift
+            else:
+                x = z_data.Station.astype(float) + station_shift
+
             xx = x_data.loc[:, ch].astype(float) * data_scaling
-
-            for ax in [x_ax, x_ax_log]:
-                ax.plot(x, xx,
-                        color=line_color,
-                        alpha=alpha,
-                        # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
-                        label=label,
-                        ls=ls,
-                        zorder=1)
-            for ax in [z_ax, z_ax_log]:
-                ax.plot(x, zz,
-                        color=line_color,
-                        alpha=alpha,
-                        # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
-                        label=label,
-                        ls=ls,
-                        zorder=1)
-
-            for ax in axes:
-                if x_min and x_max:
-                    ax.set_xlim([x_min, x_max])
-                else:
-                    ax.set_xlim([x.min(), x.max()])
-                if y_min and y_max:
-                    ax.set_ylim([y_min, y_max])
-
-    def plot_mun(axes, file, ch_start, ch_end, ch_step=1, name="", station_shift=0, data_scaling=1., alpha=1.,
-                 line_color=None, ls=None, x_min=None, x_max=None, y_min=None, y_max=None, single_file=False,
-                 incl_label=True, filter=False):
-        x_ax, z_ax, x_ax_log, z_ax_log = axes
-        rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
-        x_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
-        z_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        z_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
-
-        x_data = file.data[file.data.Component == "X"]
-        z_data = file.data[file.data.Component == "Z"]
-
-        channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
-        min_ch = ch_start - 1
-        max_ch = min(ch_end - 1, len(channels) - 1)
-        plotting_channels = channels[min_ch: max_ch + 1: ch_step]
-        if single_file is True:
-            line_color = None
-
-        for ind, ch in enumerate(plotting_channels):
-            if incl_label is True:
-                if single_file is True:
-                    label = f"{file.ch_times[min_ch + ind]:.3f}ms"
-                    # label = ch
-                else:
-                    if ind == 0:
-                        label = name
-                    else:
-                        label = None
-            else:
-                label = None
-
-            x = z_data.Station.astype(float) + station_shift
-            zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
-            xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
+            yy = y_data.loc[:, ch].astype(float) * data_scaling
+            zz = z_data.loc[:, ch].astype(float) * data_scaling
 
             if filter is True:
-                zz = savgol_filter(zz, 21, 3)
                 xx = savgol_filter(xx, 21, 3)
+                yy = savgol_filter(yy, 21, 3)
+                zz = savgol_filter(zz, 21, 3)
 
             for ax in [x_ax, x_ax_log]:
                 ax.plot(x, xx,
-                        color=line_color,
                         alpha=alpha,
-                        # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                         label=label,
                         ls=ls,
+                        color=lc,
+                        zorder=1)
+            for ax in [y_ax, y_ax_log]:
+                ax.plot(x, yy,
+                        alpha=alpha,
+                        label=label,
+                        ls=ls,
+                        color=lc,
                         zorder=1)
             for ax in [z_ax, z_ax_log]:
                 ax.plot(x, zz,
-                        color=line_color,
                         alpha=alpha,
-                        # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
                         label=label,
                         ls=ls,
+                        color=lc,
                         zorder=1)
 
-            for ax in axes:
-                if x_min and x_max:
-                    ax.set_xlim([x_min, x_max])
-                else:
-                    ax.set_xlim([x.min(), x.max()])
-                if y_min and y_max:
-                    ax.set_ylim([y_min, y_max])
+            # for ax in axes:
+            #     if ax:
+            #         if x_min is not None and x_max is not None:
+            #             ax.set_xlim([x_min, x_max])
+            #         else:
+            #             ax.set_xlim([x.min(), x.max()])
+            #         if y_min is not None and y_max is not None:
+            #             ax.set_ylim([y_min, y_max])
 
-    def plot_plate(axes, file, ch_start, ch_end, ch_step=1, name="", station_shift=0, data_scaling=1., alpha=1.,
-                 line_color=None, ls=None, x_min=None, x_max=None, y_min=None, y_max=None, single_file=False,
-                 incl_label=True, filter=False):
-        x_ax, z_ax, x_ax_log, z_ax_log = axes
-        rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
-        x_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
-        z_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        z_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+    def format_figure(figure, axes, title, files, min_ch, max_ch,
+                      ch_step=1, b_field=False, ylabel='', footnote='',
+                      x_min=None, x_max=None, y_min=None, y_max=None,
+                      incl_legend=True, incl_legend_ls=False, incl_legend_colors=False,
+                      style_legend_by='time', color_legend_by='file'):
 
-        x_data = file.data[file.data.Component == "X"]
-        z_data = file.data[file.data.Component == "Z"]
-
-        channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
-        min_ch = ch_start - 1
-        max_ch = min(ch_end - 1, len(channels) - 1)
-        plotting_channels = channels[min_ch: max_ch + 1: ch_step]
-        if single_file is True:
-            line_color = None
-
-        for ind, ch in enumerate(plotting_channels):
-            if incl_label is True:
-                if single_file is True:
-                    label = f"{file.ch_times[min_ch + ind]:.3f}ms"
-                    # label = ch
-                else:
-                    if ind == 0:
-                        label = name
-                    else:
-                        label = None
-            else:
-                label = None
-
-            x = z_data.Station.astype(float) + station_shift
-            zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
-            xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
-
-            if filter is True:
-                zz = savgol_filter(zz, 21, 3)
-                xx = savgol_filter(xx, 21, 3)
-
-            for ax in [x_ax, x_ax_log]:
-                ax.plot(x, xx,
-                        color=line_color,
-                        alpha=alpha,
-                        # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
-                        label=label,
-                        ls=ls,
-                        zorder=1)
-            for ax in [z_ax, z_ax_log]:
-                ax.plot(x, zz,
-                        color=line_color,
-                        alpha=alpha,
-                        # alpha=1 - (ind / (len(plotting_channels))) * 0.9,
-                        label=label,
-                        ls=ls,
-                        zorder=1)
-
-            for ax in axes:
-                if x_min and x_max:
-                    ax.set_xlim([x_min, x_max])
-                else:
-                    ax.set_xlim([x.min(), x.max()])
-                if y_min and y_max:
-                    ax.set_ylim([y_min, y_max])
-
-    def format_figure(figure, title, files, min_ch, max_ch, ch_step=1, b_field=False, incl_footnote=False,
-                      legend_times=None, incl_legend=True, incl_legend_ls=False, ylabel=''):
         for legend in figure.legends:
             legend.remove()
 
-        x_ax, x_ax_log, z_ax, z_ax_log = figure.axes
+        if not isinstance(files, list):
+            files = [files]
+
+        rainbow_colors = cm.jet(np.linspace(0, 1, (int((max_ch - min_ch) / ch_step)) + 1))
+        line_styles = ['-', '--', '-.', ':']
+
+        x_ax, x_ax_log = axes.get('X')
+        y_ax, y_ax_log = axes.get('Y')
+        z_ax, z_ax_log = axes.get('Z')
+
         # Set the labels
-        z_ax.set_xlabel(f"Station")
-        z_ax_log.set_xlabel(f"Station")
+        for ax in [x_ax_log, y_ax_log, z_ax_log]:
+            if ax:
+                ax.set_xlabel(f"Station")
+
         if ylabel:
-            for ax in figure.axes:
-                ax.set_ylabel(ylabel)
+            if x_ax:
+                x_ax.set_ylabel(ylabel)
+                x_ax_log.set_ylabel(ylabel)
+            elif y_ax:
+                y_ax.set_ylabel(ylabel)
+                y_ax_log.set_ylabel(ylabel)
+            else:
+                z_ax.set_ylabel(ylabel)
+                z_ax_log.set_ylabel(ylabel)
         else:
             if b_field is True:
-                for ax in figure.axes:
-                    ax.set_ylabel(f"EM Response\n(nT)")
+                if x_ax:
+                    x_ax.set_ylabel(f"EM Response\n(nT)")
+                    x_ax_log.set_ylabel(f"EM Response\n(nT)")
+                elif y_ax:
+                    y_ax.set_ylabel(f"EM Response\n(nT)")
+                    y_ax_log.set_ylabel(f"EM Response\n(nT)")
+                else:
+                    z_ax.set_ylabel(f"EM Response\n(nT)")
+                    z_ax_log.set_ylabel(f"EM Response\n(nT)")
             else:
-                for ax in figure.axes:
-                    ax.set_ylabel(f"EM Response\n(nT/s)")
+                if x_ax:
+                    x_ax.set_ylabel(f"EM Response\n(nT/s)")
+                    x_ax_log.set_ylabel(f"EM Response\n(nT/s)")
+                elif y_ax:
+                    y_ax.set_ylabel(f"EM Response\n(nT/s)")
+                    y_ax_log.set_ylabel(f"EM Response\n(nT/s)")
+                else:
+                    z_ax.set_ylabel(f"EM Response\n(nT/s)")
+                    z_ax_log.set_ylabel(f"EM Response\n(nT/s)")
 
         figure.suptitle(title)
-        x_ax.set_title(f"X Component")
-        z_ax.set_title(f"Z Component")
-        x_ax_log.set_title(f"X Component")
-        z_ax_log.set_title(f"Z Component")
+        if x_ax and x_ax_log:
+            x_ax.set_title(f"X Component")
+            x_ax_log.set_title(f"X Component")
+        if y_ax and y_ax_log:
+            y_ax.set_title(f"Y Component")
+            y_ax_log.set_title(f"Y Component")
+        if z_ax and z_ax_log:
+            z_ax.set_title(f"Z Component")
+            z_ax_log.set_title(f"Z Component")
 
-        if incl_legend is True:
-            # Create a manual legend
-            if legend_times is not None:
-                colors = cm.jet(np.linspace(0, 1, int(((max_ch - min_ch) + 1) / ch_step)))
-                times = np.array(legend_times[min_ch - 1: max_ch: ch_step])
-                handles = []
-                labels = []
-                for i, color in enumerate(colors):
-                    line = Line2D([0], [0], color=color, linestyle="-")
-                    label = f"{times[i]:.3f}ms"
+        for ax in figure.axes:
+            if x_min is not None and x_max is not None:
+                ax.set_xlim([x_min, x_max])
+            if y_min is not None and y_max is not None:
+                ax.set_ylim([y_min, y_max])
+
+            if ax in [x_ax_log, y_ax_log, z_ax_log]:
+                y_min, y_max = ax.get_ylim()
+                if y_max - y_min < 10:
+                    ax.set_ylim(y_min-10, y_max+10)
+
+        if incl_legend:
+            handles, labels = [], []
+            if incl_legend_colors:
+                # Use filetype colors in legend, or color by channel (rainbow colors)
+                if color_legend_by == 'file':
+                    for i, file in enumerate(files):
+                        file_type = get_filetype(file)
+                        line = Line2D([0], [0], color=colors.get(file_type), linestyle="-")
+                        handles.append(line)
+                        labels.append(file_type)
+                else:
+                    for i, ch in enumerate(np.arange(min_ch, max_ch + 1, ch_step)):
+                        time_label = f"{files[0].ch_times[ch - 1]:.3f}ms"
+                        line = Line2D([0], [0], color=rainbow_colors[i], linestyle="-")
+                        handles.append(line)
+                        labels.append(time_label)
+
+            if incl_legend_ls:
+                # Add a separator
+                if all([incl_legend_ls, incl_legend_colors]):
+                    line = Line2D([0], [0], color='w', linestyle='-', alpha=0.0)
+                    label = ''
                     handles.append(line)
                     labels.append(label)
-            else:
-                # Create a legend from the plotted lines
-                handles, labels = z_ax.get_legend_handles_labels()
 
-            # Add file linestyles to the legend for each different file type
-            if incl_legend_ls:
-                filetypes = []
-                for file in files:
-                    filetypes.append(get_filetype(file))
-                lines = [Line2D([0], [0], color='k', linestyle=styles.get(filetype)) for filetype in filetypes]
-                handles.extend(lines)
-                labels.extend(filetypes)
-                # figure.legend(manual_lines, manual_labels, loc='center right')
+                # Use the filetype line styles, or use the channels as different line styles.
+                if style_legend_by == 'file':
+                    for i, file in enumerate(files):
+                        file_type = get_filetype(file)
+                        line = Line2D([0], [0], color='k', linestyle=styles.get(file_type))
+                        handles.append(line)
+                        labels.append(file_type)
+                else:
+                    for i, ch in enumerate(np.arange(min_ch, max_ch + 1, ch_step)):
+                        time_label = f"{files[0].ch_times[ch - 1]:.3f}ms"
+                        line = Line2D([0], [0], color='k', linestyle=line_styles[(i % len(line_styles))])
+                        handles.append(line)
+                        labels.append(time_label)
+
+            if not any([incl_legend_ls, incl_legend_colors]):
+                ax_handles, ax_labels = z_ax.get_legend_handles_labels()
+                handles.extend(ax_handles)
+                labels.extend(ax_labels)
 
             figure.legend(handles, labels, loc='upper right')
 
-        if incl_footnote is True:
-            footnote = ''
-            for file in files:
-                footnote += f"{get_filetype(file)} file plotting channels {min_ch}-{max_ch}" \
-                            f" ({file.ch_times[min_ch - 1]:.3f}ms-{file.ch_times[max_ch - 1]:.3f}ms).  "
-
-            # Add the footnote
-            z_ax.text(0.995, 0.01, footnote,
-                      ha='right',
-                      va='bottom',
-                      size=6,
-                      transform=figure.transFigure)
+            if footnote:
+                figure.axes[0].text(0.995, 0.01, footnote,
+                                    ha='right',
+                                    va='bottom',
+                                    size=8,
+                                    transform=figure.transFigure)
 
     def get_filetype(file_object):
         if isinstance(file_object, TEMFile):
@@ -2274,133 +2240,364 @@ if __name__ == '__main__':
         for ax in axes:
             ax.clear()
 
-    def log_scale(x_ax, z_ax):
-        x_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
-        z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+    def log_scale(log_axes):
+        for ax in log_axes:
+            ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
 
     def get_runtime(t):
-        return f"{math.floor((time.time() - t) / 60):02.0d}:{(time.time() - t) % 60:02.0d}"
+        runtime = f"{math.floor((time.time() - t) / 60):02.0f}:{(time.time() - t) % 60:02.0f}"
+        return runtime
+
+    def get_unique_files(files):
+        """
+        Return all unique file names.
+        :param files: list of lists
+        :return: list of str
+        """
+        unique_filenames = np.unique([f.stem.upper() for f in np.concatenate(files)])
+        return unique_filenames
 
     def plot_aspect_ratio():
-        figure, ((x_ax, x_ax_log), (z_ax, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='col', sharey='col')
-        axes = [x_ax, z_ax, x_ax_log, z_ax_log]
-        figure.set_size_inches((11 * 1.33, 8.5 * 1.33))
 
-        maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
-        mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
-        plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
-        irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
+        def plot_all():
+            print("Plotting All")
+            maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
+            mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
+            plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
+            irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
 
-        global min_ch, max_ch, channel_step
-        min_ch, max_ch = 21, 21
+            maxwell_files = list(maxwell_dir.glob("*.TEM"))
+            mun_files = list(mun_dir.glob("*.DAT"))
+            plate_files = list(plate_dir.glob("*.DAT"))
+            irap_files = list(irap_dir.glob("*.DAT"))
+
+            base_out_pdf = sample_files.joinpath(r"Aspect ratio")
+
+            unique_files = get_unique_files([maxwell_files, mun_files, plate_files, irap_files])
+            small_plate_files = [f for f in unique_files if '150' in f]
+            big_plate_files = [f for f in unique_files if '600' in f]
+
+            t = time.time()
+            count = 0
+            for files, out_pdf in zip([small_plate_files, big_plate_files],
+                                      [base_out_pdf.joinpath("Aspect Ratio Models - 150m Plates.PDF"),
+                                       base_out_pdf.joinpath("Aspect Ratio Models - 600m Plates.PDF")]):
+
+                with PdfPages(out_pdf) as pdf:
+
+                    for stem in files:
+                        print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
+                        format_files = []
+
+                        max_obj = None
+                        mun_obj = None
+                        irap_obj = None
+                        plate_obj = None
+
+                        max_file = maxwell_dir.joinpath(stem).with_suffix(".TEM")
+                        mun_file = mun_dir.joinpath(stem).with_suffix(".DAT")
+                        irap_file = irap_dir.joinpath(stem).with_suffix(".DAT")
+                        plate_file = plate_dir.joinpath(stem).with_suffix(".DAT")
+
+                        if not max_file.exists():
+                            logging_file.write(f"{stem} missing from Maxwell.")
+                            print(f"{stem} missing from Maxwell.")
+                        else:
+                            max_obj = TEMFile().parse(max_file)
+                            format_files.append(max_obj)
+
+                        if not mun_file.exists():
+                            logging_file.write(f"{stem} missing from MUN.")
+                            print(f"{stem} missing from MUN.")
+                        else:
+                            mun_obj = MUNFile().parse(mun_file)
+                            format_files.append(mun_obj)
+
+                        if not irap_file.exists():
+                            logging_file.write(f"{stem} missing from IRAP.")
+                            print(f"{stem} missing from IRAP.")
+                        else:
+                            irap_obj = IRAPFile().parse(irap_file)
+                            format_files.append(irap_obj)
+
+                        if not plate_file.exists():
+                            logging_file.write(f"{stem} missing from PLATE.")
+                            print(f"{stem} missing from PLATE.")
+                        else:
+                            plate_obj = PlateFFile().parse(plate_file)
+                            format_files.append(plate_obj)
+
+                        if not format_files:
+                            logging_file.write(f"No files found for {stem}.")
+                            print(f"No files found for {stem}.")
+                            continue
+
+                        for ch_range in channel_tuples:
+                            start_ch, end_ch = ch_range[0], ch_range[1]
+                            if ch_range[0] < min_ch:
+                                start_ch = min_ch
+                            if ch_range[1] > max_ch:
+                                end_ch = max_ch
+                            print(f"Plotting channel {start_ch} to {end_ch}")
+
+                            if max_obj:
+                                plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                                         ch_step=channel_step,
+                                         station_shift=-400,
+                                         data_scaling=1e-6,
+                                         incl_label=True,
+                                         lc=colors.get("Maxwell")
+                                         )
+                            if mun_obj:
+                                plot_obj(ax_dict, mun_obj, start_ch, end_ch,
+                                         ch_step=channel_step,
+                                         station_shift=-200,
+                                         incl_label=True,
+                                         alpha=1.,
+                                         filter=True,
+                                         lc=colors.get("MUN")
+                                         )
+
+                            if irap_obj:
+                                plot_obj(ax_dict, irap_obj, start_ch, end_ch,
+                                         ch_step=channel_step,
+                                         incl_label=True,
+                                         alpha=0.6,
+                                         lc=colors.get("IRAP")
+                                         )
+
+                            if plate_obj:
+                                plot_obj(ax_dict, plate_obj, start_ch - 20, end_ch - 20,
+                                         ch_step=channel_step,
+                                         incl_label=True,
+                                         alpha=0.6,
+                                         lc=colors.get("PLATE")
+                                         )
+
+                            format_figure(figure, ax_dict,
+                                          f"Aspect Ratio Model\n"
+                                          f"{stem}\n"
+                                          f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
+                                          format_files, start_ch, end_ch,
+                                          x_min=0,
+                                          x_max=200,
+                                          ch_step=channel_step,
+                                          incl_legend=True,
+                                          incl_legend_ls=True,
+                                          incl_legend_colors=True,
+                                          style_legend_by='time',
+                                          color_legend_by='file',
+                                          footnote=f"MUN data filtered using Savitzky-Golay filter")
+
+                            pdf.savefig(figure, orientation='landscape')
+                            clear_axes(axes)
+                            log_scale([x_ax_log, y_ax_log, z_ax_log])
+                        count += 1
+
+                os.startfile(str(out_pdf))
+
+            print(f"Aspect ratio plot time: {get_runtime(t)}")
+            logging_file.write(f"Aspect ratio plot time: {get_runtime(t)}\n")
+
+        def plot_irap_mun():
+            print(f"Plotting IRAP vs MUN")
+            mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
+            irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
+
+            mun_files = list(mun_dir.glob("*.DAT"))
+            irap_files = list(irap_dir.glob("*.DAT"))
+
+            base_out_pdf = sample_files.joinpath(r"Aspect ratio")
+
+            unique_files = get_unique_files([mun_files, irap_files])
+            small_plate_files = [f for f in unique_files if '150' in f]
+            big_plate_files = [f for f in unique_files if '600' in f]
+
+            t = time.time()
+            count = 0
+            for files, out_pdf in zip([small_plate_files, big_plate_files],
+                                      [base_out_pdf.joinpath("Aspect Ratio Models - 150m Plates, IRAP vs MUN.PDF"),
+                                       base_out_pdf.joinpath("Aspect Ratio Models - 600m Plates, IRAP vs MUN.PDF")]):
+
+                with PdfPages(out_pdf) as pdf:
+
+                    for stem in files:
+                        print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
+                        format_files = []
+
+                        mun_file = mun_dir.joinpath(stem).with_suffix(".DAT")
+                        irap_file = irap_dir.joinpath(stem).with_suffix(".DAT")
+
+                        if not all([mun_file.exists(), irap_file.exists()]):
+                            logging_file.write(f"{stem} is not available for both filetypes.")
+                            print(f"{stem} is not available for both filetypes.")
+                            continue
+                        else:
+                            mun_obj = MUNFile().parse(mun_file)
+                            irap_obj = IRAPFile().parse(irap_file)
+                            format_files.append(mun_obj)
+                            format_files.append(irap_obj)
+
+                        if not format_files:
+                            logging_file.write(f"No files found for {stem}.")
+                            print(f"No files found for {stem}.")
+                            continue
+
+                        for ch_range in channel_tuples:
+                            start_ch, end_ch = ch_range[0], ch_range[1]
+                            if ch_range[0] < min_ch:
+                                start_ch = min_ch
+                            if ch_range[1] > max_ch:
+                                end_ch = max_ch
+                            print(f"Plotting channel {start_ch} to {end_ch}")
+
+                            if mun_obj:
+                                plot_obj(ax_dict, mun_obj, start_ch, end_ch,
+                                         ch_step=channel_step,
+                                         station_shift=-200,
+                                         incl_label=True,
+                                         alpha=1.,
+                                         filter=True,
+                                         lc=colors.get("MUN")
+                                         )
+
+                            if irap_obj:
+                                plot_obj(ax_dict, irap_obj, start_ch, end_ch,
+                                         ch_step=channel_step,
+                                         incl_label=True,
+                                         alpha=0.6,
+                                         lc=colors.get("IRAP")
+                                         )
+
+                            format_figure(figure, ax_dict,
+                                          f"Aspect Ratio Model\n"
+                                          f"{stem}\n"
+                                          f"{mun_obj.ch_times[start_ch - 1]}ms to {mun_obj.ch_times[end_ch - 1]}ms",
+                                          format_files, start_ch, end_ch,
+                                          x_min=0,
+                                          x_max=200,
+                                          ch_step=channel_step,
+                                          incl_legend=True,
+                                          incl_legend_ls=True,
+                                          incl_legend_colors=True,
+                                          style_legend_by='time',
+                                          color_legend_by='file',
+                                          footnote=f"MUN data filtered using Savitzky-Golay filter")
+
+                            pdf.savefig(figure, orientation='landscape')
+                            clear_axes(axes)
+                            log_scale([x_ax_log, y_ax_log, z_ax_log])
+                        count += 1
+
+                os.startfile(str(out_pdf))
+
+            print(f"Aspect ratio plot time: {get_runtime(t)}")
+            logging_file.write(f"Aspect ratio plot time: {get_runtime(t)}\n")
+
+        def plot_100m_below_surface():
+            print("Plotting 100m below surface")
+            maxwell_dir = sample_files.joinpath(
+                r"Aspect ratio\Maxwell\Aspect Ratio Plates - 100m below surface")
+            plate_dir = sample_files.joinpath(
+                r"Aspect ratio\PLATE\two plates from aspect ratio test moved 100m below surface")
+
+            maxwell_files = list(maxwell_dir.glob("*.TEM"))
+            plate_files = list(plate_dir.glob("*.DAT"))
+            unique_files = get_unique_files([maxwell_files, plate_files])
+
+            out_pdf = sample_files.joinpath(r"Aspect Ratio\Aspect Ratio Models - 100m Below Surface.PDF")
+            t = time.time()
+            count = 0
+            with PdfPages(out_pdf) as pdf:
+
+                for stem in unique_files[-2:]:
+                    print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
+                    format_files = []
+
+                    max_file = maxwell_dir.joinpath(stem).with_suffix(".TEM")
+                    plate_file = plate_dir.joinpath(stem).with_suffix(".DAT")
+
+                    if not all([max_file.exists(), plate_file.exists()]):
+                        logging_file.write(f"{stem} is not available for both filetypes.")
+                        print(f"{stem} is not available for both filetypes.")
+                        continue
+                    else:
+                        max_obj = TEMFile().parse(max_file)
+                        plate_obj = PlateFFile().parse(plate_file)
+                        format_files.append(max_obj)
+                        format_files.append(plate_obj)
+
+                    if not format_files:
+                        logging_file.write(f"No files found for {stem}.")
+                        print(f"No files found for {stem}.")
+                        continue
+
+                    for ch_range in channel_tuples:
+                        start_ch, end_ch = ch_range[0], ch_range[1]
+                        if ch_range[0] < min_ch:
+                            start_ch = min_ch
+                        if ch_range[1] > max_ch:
+                            end_ch = max_ch
+                        print(f"Plotting channel {start_ch} to {end_ch}")
+
+                        if max_obj:
+                            plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=-400,
+                                     data_scaling=1e-6,
+                                     incl_label=True,
+                                     lc=colors.get("Maxwell")
+                                     )
+
+                        if plate_obj:
+                            plot_obj(ax_dict, plate_obj, start_ch - 20, end_ch - 20,
+                                     ch_step=channel_step,
+                                     incl_label=True,
+                                     alpha=0.6,
+                                     lc=colors.get("PLATE")
+                                     )
+
+                        format_figure(figure, ax_dict,
+                                      f"Aspect Ratio Model: 100m Below Surface\n"
+                                      f"{stem}\n"
+                                      f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
+                                      format_files, start_ch, end_ch,
+                                      x_min=0,
+                                      x_max=200,
+                                      ch_step=channel_step,
+                                      incl_legend=True,
+                                      incl_legend_ls=True,
+                                      incl_legend_colors=True,
+                                      style_legend_by='time',
+                                      color_legend_by='file',
+                                      footnote="")
+
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        log_scale([x_ax_log, y_ax_log, z_ax_log])
+                    count += 1
+
+            os.startfile(str(out_pdf))
+
+            print(f"Aspect ratio plot time: {get_runtime(t)}")
+            logging_file.write(f"Aspect ratio plot time: {get_runtime(t)}\n")
+
+        figure, ((x_ax, y_ax, z_ax), (x_ax_log, y_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=3, sharex='all', sharey=False)
+        ax_dict = {"X": (x_ax, x_ax_log), "Y": (y_ax, y_ax_log), "Z": (z_ax, z_ax_log)}
+        axes = [x_ax, y_ax, z_ax, x_ax_log, y_ax_log, z_ax_log]
+        figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+        log_scale([x_ax_log, y_ax_log, z_ax_log])
+
+        # global min_ch, max_ch, channel_step
+        min_ch, max_ch = 21, 44
         channel_step = 1
+        num_chs = 4
+        channel_tuples = list(zip(np.arange(min_ch, max_ch, num_chs - 1),
+                                  np.arange(min_ch + num_chs - 1, max_ch + num_chs - 1, num_chs - 1)))
 
-        t = time.time()
-
-
-
-        # tester = TestRunner()
-        # tester.show()
-        #
-        # logging_file.write(f">>Plotting aspect ratio test results<<\n")
-        #
-        # # # Maxwell
-        # # maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
-        # # tester.add_row(str(maxwell_dir), "Maxwell")
-        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
-        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
-        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
-        #
-        # # MUN
-        # mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
-        # tester.add_row(str(mun_dir), "MUN")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-200")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-        #
-        # # # Plate
-        # # plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
-        # # tester.add_row(str(plate_dir), "PLATE")
-        # # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-        #
-        # # Peter
-        # irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
-        # tester.add_row(str(irap_dir), "IRAP")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-        #
-        # """ Plotting """
-        # tester.plot_profiles_rbtn.setChecked(True)
-        #
-        # tester.custom_stations_cbox.setChecked(False)
-        # tester.y_cbox.setChecked(True)
-        # tester.test_name_edit.setText(r"Aspect Ratio")
-        # # tester.fixed_range_cbox.setChecked(True)
-        # tester.include_edit.setText("150")
-        # tester.include_edit.editingFinished.emit()
-        #
-        # # file.write(f"Plotting 150m plates (linear, all stations)\n")
-        # # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate.PDF"))
-        # # tester.output_filepath_edit.setText(pdf_file)
-        # # tester.print_pdf(from_script=True)
-        #
-        # logging_file.write(f"Plotting 150m plates (linear, stations 0-200)\n")
-        # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200).PDF"))
-        # tester.custom_stations_cbox.setChecked(True)
-        # tester.station_start_sbox.setValue(0)
-        # tester.station_end_sbox.setValue(200)
-        # tester.output_filepath_edit.setText(pdf_file)
-        # tester.print_pdf(from_script=True)
-        #
-        # # file.write(f"Plotting 600m plates (linear, all stations)\n")
-        # # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate.PDF"))
-        # # tester.custom_stations_cbox.setChecked(False)
-        # # tester.output_filepath_edit.setText(pdf_file)
-        # # tester.include_edit.setText("600")
-        # # tester.include_edit.editingFinished.emit()
-        # # tester.print_pdf(from_script=True)
-        #
-        # logging_file.write(f"Plotting 600m plates (linear, stations 0-200)\n")
-        # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200).PDF"))
-        # tester.custom_stations_cbox.setChecked(True)
-        # tester.output_filepath_edit.setText(pdf_file)
-        # tester.print_pdf(from_script=True)
-        #
-        # """ Log Y """
-        # tester.log_y_cbox.setChecked(True)
-        # tester.custom_stations_cbox.setChecked(False)
-        #
-        # # file.write(f"Plotting 150m plates (log, all stations)\n")
-        # # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate [LOG].PDF"))
-        # # tester.output_filepath_edit.setText(pdf_file)
-        # # tester.print_pdf(from_script=True)
-        #
-        # logging_file.write(f"Plotting 150m plates (log, stations 0-200)\n")
-        # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 150m plate (Station 0-200) [LOG].PDF"))
-        # tester.custom_stations_cbox.setChecked(True)
-        # tester.station_start_sbox.setValue(0)
-        # tester.station_end_sbox.setValue(200)
-        # tester.output_filepath_edit.setText(pdf_file)
-        # tester.print_pdf(from_script=True)
-        #
-        # # file.write(f"Plotting 600m plates (log, all stations)\n")
-        # # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate [LOG].PDF"))
-        # # tester.custom_stations_cbox.setChecked(False)
-        # # tester.output_filepath_edit.setText(pdf_file)
-        # # tester.include_edit.setText("600")
-        # # tester.include_edit.editingFinished.emit()
-        # # tester.print_pdf(from_script=True)
-        #
-        # logging_file.write(f"Plotting 600m plates (log, stations 0-200)\n")
-        # pdf_file = str(sample_files.joinpath(r"Aspect Ratio\Aspect Ratio - 600m plate (Station 0-200) [LOG].PDF"))
-        # tester.custom_stations_cbox.setChecked(True)
-        # tester.output_filepath_edit.setText(pdf_file)
-        # tester.print_pdf(from_script=True)
-
-        print(f"Aspect ratio plot time: {get_runtime(t)}")
-        logging_file.write(f"Aspect ratio plot time: {get_runtime(t)}\n")
+        # plot_all()
+        # plot_irap_mun()
+        plot_100m_below_surface()
 
     def plot_two_way_induction():
         t = time.time()
@@ -4470,7 +4667,6 @@ if __name__ == '__main__':
                 count += 1
 
         os.startfile(out_pdf)
-
 
     # TODO Change "MUN" to "EM3D"
     plot_aspect_ratio()

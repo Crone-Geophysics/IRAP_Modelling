@@ -243,9 +243,9 @@ class IRAPFile:
         data_text = content.split("### Data ###")[1].strip()
         data_io = StringIO(data_text)
         self.data = pd.read_csv(data_io, delim_whitespace=True)
-        str_cols = [str(i) for i in range(len(self.ch_times))]
-        int_cols = list(range(len(self.ch_times)))
-        self.data.rename(columns=dict(zip(str_cols, int_cols)), inplace=True)
+        orgi_cols = [str(i) for i in range(len(self.ch_times))]
+        new_cols = [str(i) for i in range(1, len(self.ch_times) + 1)]
+        self.data.rename(columns=dict(zip(orgi_cols, new_cols)), inplace=True)
         self.components = self.data.Component.unique()
 
         return self
@@ -265,6 +265,6 @@ if __name__ == '__main__':
     sample_files = Path(__file__).parents[2].joinpath('sample_files')
     # file = sample_files.joinpath(r'Aspect ratio\Peter\2021-03-11_MUN_150m_ModelGroup.txt')
     # peter_file = peter_file_parser.convert(file)
-    file = sample_files.joinpath(r'Aspect ratio\Peter\50x150A.dat')
+    file = sample_files.joinpath(r'Aspect ratio\IRAP\50x150A.dat')
     irap_file = irap_file_parser.parse(file)
-    irap_file.get_range()
+    # irap_file.get_range()

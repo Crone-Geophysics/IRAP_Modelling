@@ -1,0 +1,6 @@
+c35: plates (1+4+5)_(3+6)
+Here, corresponding 3D prisms have a thickness of 2 m, therefore:
+(1) for file name with "100S": prism conductivity is 100S/2m=50 S/m each.
+(1) for file name with "200S": prism conductivity is 200S/2m=100 S/m each.
+
+ The 2 m thickness is made from meshing consideration.
