@@ -1,14 +1,12 @@
+import copy
 import io
 import math
 import os
 import pickle
 import re
 import sys
-import time
-import copy
 from itertools import zip_longest
 from pathlib import Path
-from cycler import cycler
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -18,13 +16,14 @@ from PyQt5 import (QtCore, QtGui, uic)
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QMessageBox, QFrame, QErrorMessage, QFileDialog,
                              QTableWidgetItem, QScrollArea, QSpinBox, QHBoxLayout, QLabel, QInputDialog, QLineEdit,
                              QProgressDialog, QWidget, QHeaderView, QPushButton, QColorDialog)
+from cycler import cycler
 from matplotlib.backends.backend_pdf import PdfPages
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas, \
     NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 from matplotlib.pyplot import cm
 from matplotlib.ticker import MaxNLocator
-from matplotlib.lines import Line2D
 from natsort import natsorted, os_sorted
 from scipy.signal import savgol_filter
 
@@ -33,9 +32,6 @@ from src.file_types.irap_file import IRAPFile
 from src.file_types.mun_file import MUNFile, MUNTab
 from src.file_types.platef_file import PlateFFile, PlateFTab
 from src.file_types.tem_file import TEMFile, TEMTab
-
-log_file_path = r"log.txt"
-logging_file = open(log_file_path, "w+")
 
 # Modify the paths for when the script is being run in a frozen state (i.e. as an EXE)
 if getattr(sys, 'frozen', False):
@@ -1929,8 +1925,8 @@ if __name__ == '__main__':
 
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
 
-    def plot_obj(ax_dict, file, ch_start, ch_end, ch_step=1, name="", station_shift=0,
-                 data_scaling=1., alpha=1., ls=None, lc=None, x_min=None, x_max=None, y_min=None, y_max=None,
+    def plot_obj(ax_dict, file, ch_start, ch_end, ch_step=1, ch_times=None, name="", station_shift=0,
+                 data_scaling=1., alpha=1., ls=None, lc=None,
                  incl_label=True, filter=False):
 
         rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
@@ -1942,8 +1938,9 @@ if __name__ == '__main__':
         axes = [x_ax, x_ax_log, y_ax, y_ax_log, z_ax, z_ax_log]
 
         for ax in axes:
-            ax.set_prop_cycle(cycler('color', rainbow_colors))
-            ax.set_prop_cycle(cycler('linestyle', line_styles))
+            if ax:
+                ax.set_prop_cycle(cycler('color', rainbow_colors))
+                ax.set_prop_cycle(cycler('linestyle', line_styles))
 
         if isinstance(file, TEMFile):
             x_data = file.data[file.data.COMPONENT == "X"]
@@ -1965,23 +1962,32 @@ if __name__ == '__main__':
             y_data = file.data[file.data.Component == "Y"]
             z_data = file.data[file.data.Component == "Z"]
             channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
+        elif isinstance(file, pd.DataFrame):
+            if ch_times is None:
+                raise ValueError(f"ch_times cannot be None if a DataFrame is passed.")
+            x_data = file[file.Component == "X"]
+            y_data = file[file.Component == "Y"]
+            z_data = file[file.Component == "Z"]
+            channels = [f'{num}' for num in range(1, len(ch_times) + 1)]
         else:
-            raise ValueError(f"{file} is not a valid filetype.")
+            raise ValueError(f"{file} is not a valid input type.")
 
         min_ch = ch_start - 1
         max_ch = min(ch_end - 1, len(channels) - 1)
         plotting_channels = channels[min_ch: max_ch + 1: ch_step]
+        if ch_end > len(channels):
+            raise ValueError(f"Channel {ch_end} is beyond the number of channels ({len(channels)}).")
 
         for ind, ch in enumerate(plotting_channels):
-            if incl_label is True:
-                if ind == 0:
-                    if not name:
-                        name = get_filetype(file)
-                    label = name
-                else:
-                    label = None
+            # if incl_label is True:
+            if ind == 0:
+                if not name:
+                    name = get_filetype(file)
+                label = name
             else:
                 label = None
+            # else:
+            #     label = None
 
             if isinstance(file, TEMFile):
                 x = z_data.STATION.astype(float) + station_shift
@@ -1998,35 +2004,29 @@ if __name__ == '__main__':
                 zz = savgol_filter(zz, 21, 3)
 
             for ax in [x_ax, x_ax_log]:
-                ax.plot(x, xx,
-                        alpha=alpha,
-                        label=label,
-                        ls=ls,
-                        color=lc,
-                        zorder=1)
+                if ax:
+                    ax.plot(x, xx,
+                            alpha=alpha,
+                            label=label,
+                            ls=ls,
+                            color=lc,
+                            zorder=1)
             for ax in [y_ax, y_ax_log]:
-                ax.plot(x, yy,
-                        alpha=alpha,
-                        label=label,
-                        ls=ls,
-                        color=lc,
-                        zorder=1)
+                if ax:
+                    ax.plot(x, yy,
+                            alpha=alpha,
+                            label=label,
+                            ls=ls,
+                            color=lc,
+                            zorder=1)
             for ax in [z_ax, z_ax_log]:
-                ax.plot(x, zz,
-                        alpha=alpha,
-                        label=label,
-                        ls=ls,
-                        color=lc,
-                        zorder=1)
-
-            # for ax in axes:
-            #     if ax:
-            #         if x_min is not None and x_max is not None:
-            #             ax.set_xlim([x_min, x_max])
-            #         else:
-            #             ax.set_xlim([x.min(), x.max()])
-            #         if y_min is not None and y_max is not None:
-            #             ax.set_ylim([y_min, y_max])
+                if ax:
+                    ax.plot(x, zz,
+                            alpha=alpha,
+                            label=label,
+                            ls=ls,
+                            color=lc,
+                            zorder=1)
 
     def format_figure(figure, axes, title, files, min_ch, max_ch,
                       ch_step=1, b_field=False, ylabel='', footnote='',
@@ -2102,9 +2102,10 @@ if __name__ == '__main__':
                 ax.set_ylim([y_min, y_max])
 
             if ax in [x_ax_log, y_ax_log, z_ax_log]:
-                y_min, y_max = ax.get_ylim()
-                if y_max - y_min < 10:
-                    ax.set_ylim(y_min-10, y_max+10)
+                if ax:
+                    ymin, ymax = ax.get_ylim()
+                    if ymax - ymin < 15:
+                        ax.yaxis.set_major_formatter(plt.FormatStrFormatter('%.1e'))
 
         if incl_legend:
             handles, labels = [], []
@@ -2116,12 +2117,16 @@ if __name__ == '__main__':
                         line = Line2D([0], [0], color=colors.get(file_type), linestyle="-")
                         handles.append(line)
                         labels.append(file_type)
-                else:
+                elif color_legend_by == 'time':
                     for i, ch in enumerate(np.arange(min_ch, max_ch + 1, ch_step)):
                         time_label = f"{files[0].ch_times[ch - 1]:.3f}ms"
                         line = Line2D([0], [0], color=rainbow_colors[i], linestyle="-")
                         handles.append(line)
                         labels.append(time_label)
+                else:
+                    ax_handles, ax_labels = z_ax.get_legend_handles_labels()
+                    handles.extend(ax_handles)
+                    labels.extend(ax_labels)
 
             if incl_legend_ls:
                 # Add a separator
@@ -2138,17 +2143,21 @@ if __name__ == '__main__':
                         line = Line2D([0], [0], color='k', linestyle=styles.get(file_type))
                         handles.append(line)
                         labels.append(file_type)
-                else:
+                elif style_legend_by == 'time':
                     for i, ch in enumerate(np.arange(min_ch, max_ch + 1, ch_step)):
                         time_label = f"{files[0].ch_times[ch - 1]:.3f}ms"
                         line = Line2D([0], [0], color='k', linestyle=line_styles[(i % len(line_styles))])
                         handles.append(line)
                         labels.append(time_label)
+                else:
+                    ax_handles, ax_labels = z_ax.get_legend_handles_labels()
+                    handles.extend(ax_handles)
+                    labels.extend(ax_labels)
 
-            if not any([incl_legend_ls, incl_legend_colors]):
-                ax_handles, ax_labels = z_ax.get_legend_handles_labels()
-                handles.extend(ax_handles)
-                labels.extend(ax_labels)
+            # if not any([incl_legend_ls, incl_legend_colors]):
+            #     ax_handles, ax_labels = z_ax.get_legend_handles_labels()
+            #     handles.extend(ax_handles)
+            #     labels.extend(ax_labels)
 
             figure.legend(handles, labels, loc='upper right')
 
@@ -2260,7 +2269,12 @@ if __name__ == '__main__':
     def plot_aspect_ratio():
 
         def plot_all():
-            print("Plotting All")
+            log_file_path = sample_files.joinpath(r"Aspect Ratio\Aspect ratio log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print("Plotting all aspect ratio models")
+            logging_file.write("Plotting all aspect ratio models\n")
+
             maxwell_dir = sample_files.joinpath(r"Aspect Ratio\Maxwell\2m stations")
             mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
             plate_dir = sample_files.joinpath(r"Aspect Ratio\PLATE\2m stations")
@@ -2300,35 +2314,35 @@ if __name__ == '__main__':
                         plate_file = plate_dir.joinpath(stem).with_suffix(".DAT")
 
                         if not max_file.exists():
-                            logging_file.write(f"{stem} missing from Maxwell.")
+                            logging_file.write(f"{stem} missing from Maxwell.\n")
                             print(f"{stem} missing from Maxwell.")
                         else:
                             max_obj = TEMFile().parse(max_file)
                             format_files.append(max_obj)
 
                         if not mun_file.exists():
-                            logging_file.write(f"{stem} missing from MUN.")
+                            logging_file.write(f"{stem} missing from MUN.\n")
                             print(f"{stem} missing from MUN.")
                         else:
                             mun_obj = MUNFile().parse(mun_file)
                             format_files.append(mun_obj)
 
                         if not irap_file.exists():
-                            logging_file.write(f"{stem} missing from IRAP.")
+                            logging_file.write(f"{stem} missing from IRAP.\n")
                             print(f"{stem} missing from IRAP.")
                         else:
                             irap_obj = IRAPFile().parse(irap_file)
                             format_files.append(irap_obj)
 
                         if not plate_file.exists():
-                            logging_file.write(f"{stem} missing from PLATE.")
+                            logging_file.write(f"{stem} missing from PLATE.\n")
                             print(f"{stem} missing from PLATE.")
                         else:
                             plate_obj = PlateFFile().parse(plate_file)
                             format_files.append(plate_obj)
 
                         if not format_files:
-                            logging_file.write(f"No files found for {stem}.")
+                            logging_file.write(f"No files found for {stem}.\n")
                             print(f"No files found for {stem}.")
                             continue
 
@@ -2396,11 +2410,17 @@ if __name__ == '__main__':
 
                 os.startfile(str(out_pdf))
 
-            print(f"Aspect ratio plot time: {get_runtime(t)}")
-            logging_file.write(f"Aspect ratio plot time: {get_runtime(t)}\n")
+            print(f"Aspect ratio runtime: {get_runtime(t)}")
+            logging_file.write(f"Aspect ratio runtime: {get_runtime(t)}\n")
+            logging_file.close()
 
         def plot_irap_mun():
+            log_file_path = sample_files.joinpath(r"Aspect Ratio\Aspect ratio (IRAP vs MUN) log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
             print(f"Plotting IRAP vs MUN")
+            logging_file.write(f"Plotting IRAP vs MUN\n")
+
             mun_dir = sample_files.joinpath(r"Aspect Ratio\MUN")
             irap_dir = sample_files.joinpath(r"Aspect Ratio\IRAP")
 
@@ -2429,7 +2449,7 @@ if __name__ == '__main__':
                         irap_file = irap_dir.joinpath(stem).with_suffix(".DAT")
 
                         if not all([mun_file.exists(), irap_file.exists()]):
-                            logging_file.write(f"{stem} is not available for both filetypes.")
+                            logging_file.write(f"{stem} is not available for both filetypes.\n")
                             print(f"{stem} is not available for both filetypes.")
                             continue
                         else:
@@ -2439,7 +2459,7 @@ if __name__ == '__main__':
                             format_files.append(irap_obj)
 
                         if not format_files:
-                            logging_file.write(f"No files found for {stem}.")
+                            logging_file.write(f"No files found for {stem}.\n")
                             print(f"No files found for {stem}.")
                             continue
 
@@ -2491,11 +2511,17 @@ if __name__ == '__main__':
 
                 os.startfile(str(out_pdf))
 
-            print(f"Aspect ratio plot time: {get_runtime(t)}")
-            logging_file.write(f"Aspect ratio plot time: {get_runtime(t)}\n")
+            print(f"Aspect ratio runtime: {get_runtime(t)}")
+            logging_file.write(f"Aspect ratio (IRAP vs MUN) runtime: {get_runtime(t)}\n")
+            logging_file.close()
 
         def plot_100m_below_surface():
+            log_file_path = sample_files.joinpath(r"Aspect Ratio\Aspect ratio 100m below surface log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
             print("Plotting 100m below surface")
+            logging_file.write("Plotting 100m below surface\n")
+
             maxwell_dir = sample_files.joinpath(
                 r"Aspect ratio\Maxwell\Aspect Ratio Plates - 100m below surface")
             plate_dir = sample_files.joinpath(
@@ -2510,7 +2536,7 @@ if __name__ == '__main__':
             count = 0
             with PdfPages(out_pdf) as pdf:
 
-                for stem in unique_files[-2:]:
+                for stem in unique_files:
                     print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
                     format_files = []
 
@@ -2518,7 +2544,7 @@ if __name__ == '__main__':
                     plate_file = plate_dir.joinpath(stem).with_suffix(".DAT")
 
                     if not all([max_file.exists(), plate_file.exists()]):
-                        logging_file.write(f"{stem} is not available for both filetypes.")
+                        logging_file.write(f"{stem} is not available for both filetypes.\n")
                         print(f"{stem} is not available for both filetypes.")
                         continue
                     else:
@@ -2528,7 +2554,7 @@ if __name__ == '__main__':
                         format_files.append(plate_obj)
 
                     if not format_files:
-                        logging_file.write(f"No files found for {stem}.")
+                        logging_file.write(f"No files found for {stem}.\n")
                         print(f"No files found for {stem}.")
                         continue
 
@@ -2562,8 +2588,8 @@ if __name__ == '__main__':
                                       f"{stem}\n"
                                       f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
                                       format_files, start_ch, end_ch,
-                                      x_min=0,
-                                      x_max=200,
+                                      x_min=None,
+                                      x_max=None,
                                       ch_step=channel_step,
                                       incl_legend=True,
                                       incl_legend_ls=True,
@@ -2579,10 +2605,111 @@ if __name__ == '__main__':
 
             os.startfile(str(out_pdf))
 
-            print(f"Aspect ratio plot time: {get_runtime(t)}")
-            logging_file.write(f"Aspect ratio plot time: {get_runtime(t)}\n")
+            print(f"Aspect ratio runtime: {get_runtime(t)}")
+            logging_file.write(f"Aspect ratio 100m below surface runtime: {get_runtime(t)}\n")
+            logging_file.close()
 
-        figure, ((x_ax, y_ax, z_ax), (x_ax_log, y_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=3, sharex='all', sharey=False)
+        def plot_horizontal():
+            log_file_path = sample_files.joinpath(r"Aspect Ratio\Aspect ratio horizontal plates log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print("Plotting horizontal plates")
+            logging_file.write("Plotting horizontal plates\n")
+
+            figure, ((x_ax,  z_ax), (x_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='all', sharey='none')
+            ax_dict = {"X": (x_ax, x_ax_log), "Y": (None, None), "Z": (z_ax, z_ax_log)}
+            axes = [x_ax, z_ax, x_ax_log, z_ax_log]
+            figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+            log_scale([x_ax_log, z_ax_log])
+
+            maxwell_dir = sample_files.joinpath(
+                r"Aspect ratio\Maxwell\Horizontal Plates - 100m below surface")
+            plate_dir = sample_files.joinpath(
+                r"Aspect ratio\PLATE\two horizontal plates centred 100m below 400m x 400m loop")
+
+            maxwell_files = list(maxwell_dir.glob("*.TEM"))
+            plate_files = list(plate_dir.glob("*.DAT"))
+            unique_files = get_unique_files([maxwell_files, plate_files])
+
+            out_pdf = sample_files.joinpath(r"Aspect Ratio\Aspect Ratio Models - Horizontal Plates.PDF")
+            t = time.time()
+            count = 0
+            with PdfPages(out_pdf) as pdf:
+
+                for stem in unique_files:
+                    print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
+                    format_files = []
+
+                    max_file = maxwell_dir.joinpath(stem).with_suffix(".TEM")
+                    plate_file = plate_dir.joinpath(stem).with_suffix(".DAT")
+
+                    if not all([max_file.exists(), plate_file.exists()]):
+                        logging_file.write(f"{stem} is not available for both filetypes.\n")
+                        print(f"{stem} is not available for both filetypes.")
+                        continue
+                    else:
+                        max_obj = TEMFile().parse(max_file)
+                        plate_obj = PlateFFile().parse(plate_file)
+                        format_files.append(max_obj)
+                        format_files.append(plate_obj)
+
+                    if not format_files:
+                        logging_file.write(f"No files found for {stem}.\n")
+                        print(f"No files found for {stem}.")
+                        continue
+
+                    for ch_range in channel_tuples:
+                        start_ch, end_ch = ch_range[0], ch_range[1]
+                        if ch_range[0] < min_ch:
+                            start_ch = min_ch
+                        if ch_range[1] > max_ch:
+                            end_ch = max_ch
+                        print(f"Plotting channel {start_ch} to {end_ch}")
+
+                        if max_obj:
+                            plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=0,
+                                     data_scaling=1e-6,
+                                     incl_label=True,
+                                     lc=colors.get("Maxwell")
+                                     )
+
+                        if plate_obj:
+                            plot_obj(ax_dict, plate_obj, start_ch - 20, end_ch - 20,
+                                     ch_step=channel_step,
+                                     incl_label=True,
+                                     alpha=0.6,
+                                     lc=colors.get("PLATE")
+                                     )
+
+                        format_figure(figure, ax_dict,
+                                      f"Aspect Ratio Model: Horizontal Plates\n"
+                                      f"{stem}\n"
+                                      f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
+                                      format_files, start_ch, end_ch,
+                                      x_min=None,
+                                      x_max=None,
+                                      ch_step=channel_step,
+                                      incl_legend=True,
+                                      incl_legend_ls=True,
+                                      incl_legend_colors=True,
+                                      style_legend_by='time',
+                                      color_legend_by='file',
+                                      footnote="")
+
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        log_scale([x_ax_log, y_ax_log, z_ax_log])
+                    count += 1
+
+            os.startfile(str(out_pdf))
+
+            print(f"Aspect ratio runtime: {get_runtime(t)}")
+            logging_file.write(f"Aspect ratio runtime: {get_runtime(t)}\n")
+            logging_file.close()
+
+        figure, ((x_ax, y_ax, z_ax), (x_ax_log, y_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=3, sharex='all', sharey='none')
         ax_dict = {"X": (x_ax, x_ax_log), "Y": (y_ax, y_ax_log), "Z": (z_ax, z_ax_log)}
         axes = [x_ax, y_ax, z_ax, x_ax_log, y_ax_log, z_ax_log]
         figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
@@ -2597,72 +2724,146 @@ if __name__ == '__main__':
 
         # plot_all()
         # plot_irap_mun()
-        plot_100m_below_surface()
+        # plot_100m_below_surface()
+        # plot_horizontal()
 
     def plot_two_way_induction():
+
+        def plot_all(conductance, start_file=False):
+            log_file_path = sample_files.joinpath(r"Two-way induction\300x100\100S\Two-way induction log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print(f"Plotting all {conductance} two-way induction models")
+            logging_file.write(f">>Plotting all {conductance} two-way induction models\n\n")
+            figure, ((x_ax, z_ax), (x_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='all', sharey='none')
+            ax_dict = {"X": (x_ax, x_ax_log), "Y": (None, None), "Z": (z_ax, z_ax_log)}
+            axes = [x_ax, z_ax, x_ax_log, z_ax_log]
+            figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+            log_scale([x_ax_log, z_ax_log])
+
+            maxwell_dir = sample_files.joinpath(fr"Two-way induction\300x100\{conductance}\Maxwell")
+            mun_dir = sample_files.joinpath(fr"Two-way induction\300x100\{conductance}\MUN")
+            plate_dir = sample_files.joinpath(fr"Two-way induction\300x100\{conductance}\PLATE")
+
+            maxwell_files = list(maxwell_dir.glob("*.TEM"))
+            mun_files = list(mun_dir.glob("*.DAT"))
+            plate_files = list(plate_dir.glob("*.DAT"))
+
+            out_pdf = sample_files.joinpath(fr"Two-way induction\Two-Way Induction - 300x100m, {conductance}.PDF")
+
+            unique_files = os_sorted(get_unique_files([maxwell_files, mun_files, plate_files]))
+
+            count = 0
+            with PdfPages(out_pdf) as pdf:
+                for stem in unique_files:
+                    print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
+                    format_files = []
+
+                    max_obj = None
+                    mun_obj = None
+                    plate_obj = None
+
+                    max_file = maxwell_dir.joinpath(stem).with_suffix(".TEM")
+                    mun_file = mun_dir.joinpath(stem).with_suffix(".DAT")
+                    plate_file = plate_dir.joinpath(stem).with_suffix(".DAT")
+
+                    if not max_file.exists():
+                        logging_file.write(f"{stem} missing from Maxwell.\n")
+                        print(f"{stem} missing from Maxwell.")
+                    else:
+                        max_obj = TEMFile().parse(max_file)
+                        format_files.append(max_obj)
+
+                    if not mun_file.exists():
+                        logging_file.write(f"{stem} missing from MUN.\n")
+                        print(f"{stem} missing from MUN.")
+                    else:
+                        mun_obj = MUNFile().parse(mun_file)
+                        format_files.append(mun_obj)
+
+                    if not plate_file.exists():
+                        logging_file.write(f"{stem} missing from PLATE.\n")
+                        print(f"{stem} missing from PLATE.")
+                    else:
+                        plate_obj = PlateFFile().parse(plate_file)
+                        format_files.append(plate_obj)
+
+                    if not format_files:
+                        logging_file.write(f"No files found for {stem}.")
+                        print(f"No files found for {stem}.")
+                        continue
+
+                    for ch_range in channel_tuples:
+                        start_ch, end_ch = ch_range[0], ch_range[1]
+                        if ch_range[0] < min_ch:
+                            start_ch = min_ch
+                        if ch_range[1] > max_ch:
+                            end_ch = max_ch
+                        print(f"Plotting channel {start_ch} to {end_ch}")
+
+                        if max_obj:
+                            plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=0,
+                                     data_scaling=1e-6,
+                                     lc=colors.get("Maxwell")
+                                     )
+                        if mun_obj:
+                            plot_obj(ax_dict, mun_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=300,
+                                     alpha=1.,
+                                     filter=True,
+                                     lc=colors.get("MUN")
+                                     )
+
+                        if plate_obj:
+                            plot_obj(ax_dict, plate_obj, start_ch - 20, end_ch - 20,
+                                     ch_step=channel_step,
+                                     alpha=0.6,
+                                     lc=colors.get("PLATE")
+                                     )
+
+                        format_figure(figure, ax_dict,
+                                      f"Two-Way Induction\n"
+                                      f"300x100m, {conductance}\n"
+                                      f"{stem}\n"
+                                      f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
+                                      format_files, start_ch, end_ch,
+                                      x_min=None,
+                                      x_max=None,
+                                      ch_step=channel_step,
+                                      incl_legend=True,
+                                      incl_legend_ls=True,
+                                      incl_legend_colors=True,
+                                      style_legend_by='time',
+                                      color_legend_by='file',
+                                      footnote=f"MUN data filtered using Savitzky-Golay filter")
+
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        log_scale([x_ax_log, z_ax_log])
+                    count += 1
+
+                if start_file:
+                    os.startfile(str(out_pdf))
+
+                runtime = get_runtime(t)
+                print(f"Two-way induction {conductance} runtime: {runtime}")
+                logging_file.write(f"Two-way induction {conductance} runtime: {runtime}\n")
+                logging_file.close()
+
+        # global min_ch, max_ch, channel_step
+        min_ch, max_ch = 21, 44
+        channel_step = 1
+        num_chs = 4
+        channel_tuples = list(zip(np.arange(min_ch, max_ch, num_chs - 1),
+                                  np.arange(min_ch + num_chs - 1, max_ch + num_chs - 1, num_chs - 1)))
+
         t = time.time()
-        tester = TestRunner()
-        tester.show()
 
-        tester.custom_stations_cbox.setChecked(False)
-        tester.plot_profiles_rbtn.setChecked(True)
-        tester.y_cbox.setChecked(False)
-        tester.test_name_edit.setText(r"Two-Way Induction")
-
-        # Maxwell
-        maxwell_dir = sample_files.joinpath(r"Two-way induction\300x100\100S\Maxwell")
-        tester.add_row(str(maxwell_dir), "Maxwell")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Data Scaling")).setText("0.000001")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("-400")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
-
-        # MUN
-        mun_dir = sample_files.joinpath(r"Two-way induction\300x100\100S\MUN")
-        tester.add_row(str(mun_dir), "MUN")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Station Shift")).setText("300")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel End")).setText("44")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-
-        # Plate
-        plate_dir = sample_files.joinpath(r"Two-way induction\300x100\100S\PLATE")
-        tester.add_row(str(plate_dir), "PLATE")
-        tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-
-        # # Peter
-        # irap_dir = sample_files.joinpath(r"Two-way induction\300x100\100S\IRAP")
-        # tester.add_row(str(irap_dir), "IRAP")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Channel Start")).setText("21")
-        # tester.table.item(tester.table.rowCount() - 1, tester.header_labels.index("Alpha")).setText("0.5")
-
-        """Plotting"""
-        pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S.PDF"))
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf()
-
-        pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S (Station 0-200).PDF"))
-        tester.custom_stations_cbox.setChecked(True)
-        tester.station_start_sbox.setValue(0)
-        tester.station_end_sbox.setValue(200)
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf()
-
-        """LOG Y"""
-        tester.log_y_cbox.setChecked(True)
-        tester.custom_stations_cbox.setChecked(False)
-        pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S [LOG].PDF"))
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf()
-
-        pdf_file = str(sample_files.joinpath(r"Two-way induction\300x100\Two-Way Induction - 100S (Station 0-200) [LOG].PDF"))
-        tester.custom_stations_cbox.setChecked(True)
-        tester.station_start_sbox.setValue(0)
-        tester.station_end_sbox.setValue(200)
-        tester.output_filepath_edit.setText(pdf_file)
-        tester.print_pdf()
-
-        print(f"Total time: {math.floor((time.time() - t) / 60):02.0f}:{(time.time() - t) % 60:.0f}")
+        # plot_all('100S', start_file=False)
+        plot_all('1000S', start_file=True)
 
     def plot_run_on_comparison():
         tester = TestRunner()
@@ -2776,427 +2977,421 @@ if __name__ == '__main__':
         tester.include_edit.editingFinished.emit()
         tester.print_pdf()
 
-    def compare_maxwell_ribbons():
-        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet Ribbon Comparison.PDF")
-        figure, (x_ax, z_ax) = plt.subplots(nrows=2, ncols=1, sharex='all', sharey="all")
-        figure.set_size_inches((8.5, 11))
-        # plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=0.2)
+    def plot_infinite_thin_sheet():
 
-        def plot(filepath, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.,
-                 incl_footnote=False):
+        def compare_maxwell_ribbons(start_file=False):
+            log_file_path = sample_files.joinpath(
+                r"Infinite thin sheet\Infinite Thin Sheet - Maxwell Ribbon Comparison log.txt")
+            logging_file = open(str(log_file_path), "w+")
 
-            x_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
-            z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+            print(f"Comparing Maxwell ribbons for infinite thin sheet models")
+            logging_file.write(f">>Comparing Maxwell ribbons for infinite thin sheet models\n\n")
 
-            parser = TEMFile()
-            file = parser.parse(filepath)
+            figure, ((x_ax, y_ax, z_ax), (x_ax_log, y_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=3, sharex='all', sharey='none')
+            ax_dict = {"X": (x_ax, x_ax_log), "Y": (y_ax, y_ax_log), "Z": (z_ax, z_ax_log)}
+            axes = [x_ax, y_ax, z_ax, x_ax_log, y_ax_log, z_ax_log]
+            figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+            log_scale([x_ax_log, y_ax_log, z_ax_log])
 
-            print(f"Plotting {filepath.name}.")
+            t = time.time()
 
-            x_data = file.data[file.data.COMPONENT == "X"]
-            y_data = file.data[file.data.COMPONENT == "Y"]
-            z_data = file.data[file.data.COMPONENT == "Z"]
+            out_pdf = sample_files.joinpath(r"Infinite thin Sheet\Infinite Thin Sheet - Maxwell Ribbon Comparison.PDF")
 
-            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
-            min_ch = ch_start - 1
-            max_ch = min(ch_end - 1, len(channels) - 1)
-            plotting_channels = channels[min_ch: max_ch + 1]
-            global footnote
+            folder_10 =sample_files.joinpath(r"Infinite thin Sheet\Maxwell\10 Ribbons")
+            folder_50 =sample_files.joinpath(r"Infinite thin Sheet\Maxwell\50 Ribbons")
 
-            for ind, ch in enumerate(plotting_channels):
-                if ind == 0:
-                    label = f"{name}"
+            files_10 = os_sorted(list(folder_10.glob("*.tem")))
+            files_50 = os_sorted(list(folder_50.glob("*.tem")))
 
-                    if incl_footnote:
-                        if min_ch == max_ch:
-                            footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
-                        else:
-                            footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
-                                             f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
-                else:
-                    label = None
-
-                x = x_data.STATION.astype(float) + station_shift
-                xx = x_data.loc[:, ch].astype(float) * data_scaling
-                yy = y_data.loc[:, ch].astype(float) * data_scaling
-                zz = z_data.loc[:, ch].astype(float) * data_scaling
-
-                x_ax.plot(x, xx,
-                          color=color,
-                          alpha=alpha,
-                          label=label,
-                          zorder=1)
-                z_ax.plot(x, zz,
-                          color=color,
-                          alpha=alpha,
-                          label=label,
-                          zorder=1)
-
-        folder_10 = Path(sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\10 Ribbons"))
-        folder_50 = Path(sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\50 Ribbons"))
-
-        files_10 = os_sorted(list(folder_10.glob("*.tem")))
-        files_50 = os_sorted(list(folder_50.glob("*.tem")))
-
-        count = 0
-        with PdfPages(output) as pdf:
-            for filepath_10, filepath_50 in zip(files_10, files_50):
-                print(f"Plotting set {count + 1}/{len(files_10)}")
-                global footnote
-                footnote = ''
-
-                # Plot the files
-                plot(filepath_10, "b", 21, 44, name="10 Ribbons", station_shift=0, data_scaling=.000001, alpha=1.,
-                     incl_footnote=True)
-                plot(filepath_50, "r", 21, 44, name="50 Ribbons", station_shift=0, data_scaling=.000001, alpha=0.5,
-                     incl_footnote=False)
-
-                # Set the labels
-                z_ax.set_xlabel(f"Station")
-                x_ax.set_ylabel(f"EM Response\n(nT/s)")
-                z_ax.set_ylabel(f"EM Response\n(nT/s)")
-                plt.suptitle(f"Infinite Thin Sheet Ribbon Comparison")
-                x_ax.set_title(f"{filepath_10.stem} (X Component)")
-                z_ax.set_title(f"{filepath_10.stem} (Z Component)")
-
-                # Create the legend
-                handles, labels = x_ax.get_legend_handles_labels()
-
-                # sort both labels and handles by labels
-                # labels, handles = zip(*os_sorted(zip(labels, handles), key=lambda t: t[0]))
-                figure.legend(handles, labels)
-
-                # Add the footnote
-                z_ax.text(0.995, 0.01, footnote,
-                          ha='right',
-                          va='bottom',
-                          size=6,
-                          transform=figure.transFigure)
-
-                # plt.show()
-                pdf.savefig(figure, orientation='portrait')
-                x_ax.clear()
-                z_ax.clear()
-
-                count += 1
-
-        print(f"Process complete.")
-        os.startfile(output)
-
-    def compare_step_on_b_with_theory():
-        figure, (x_ax, z_ax) = plt.subplots(nrows=2, sharex='all')
-        figure.set_size_inches((8.5, 11))
-
-        def plot_maxwell(filepath, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.):
-
-            parser = TEMFile()
-            file = parser.parse(filepath)
-
-            print(f"Plotting {filepath.name}.")
-
-            x_data = file.data[file.data.COMPONENT == "X"]
-            z_data = file.data[file.data.COMPONENT == "Z"]
-
-            channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
-            min_ch = ch_start - 1
-            max_ch = min(ch_end - 1, len(channels) - 1)
-            plotting_channels = channels[min_ch: max_ch + 1]
-
-            for ind, ch in enumerate(plotting_channels):
-                if ind == 0:
-                    label = f"{name}"
-                    global footnote
-
-                    if min_ch == max_ch:
-                        footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
-                    else:
-                        footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
-                                    f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
-                else:
-                    label = None
-
-                x = z_data.STATION.astype(float) + station_shift
-                zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
-                xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
-
-                x_ax.plot(x, xx,
-                          color=color,
-                          linestyle="-",
-                          # alpha=alpha,
-                          alpha=1 - (ind / (len(plotting_channels))) * 0.9,
-                          label=label,
-                          zorder=1)
-                z_ax.plot(x, zz,
-                          color=color,
-                          linestyle="-",
-                          # alpha=alpha,
-                          alpha=1 - (ind / (len(plotting_channels))) * 0.9,
-                          label=label,
-                          zorder=1)
-
-                x_ax.set_xlim([x.min(), x.max()])
-                z_ax.set_xlim([x.min(), x.max()])
-
-        def plot_theory(theory_x_file, theory_z_file):
-            x_df = pd.read_excel(theory_x_file, header=4).dropna(axis=1)
-            z_df = pd.read_excel(theory_z_file, header=4).dropna(axis=1)
-            x = x_df.Position
-            global footnote
-            footnote += f"Theory plotting {(x_df.columns[1] * 1e3):.3f}ms to {(x_df.columns[-1] * 1e3):.3f}ms"
-
-            for ind, (_, ch_response) in enumerate(x_df.iloc[:, 1:].iteritems()):
-                if ind == 0:
-                    label = f"Theory"
-                else:
-                    label = None
-
-                theory_x = ch_response.values
-
-                x_ax.plot(x, theory_x,
-                          color="r",
-                          linestyle="-",
-                          alpha=1 - (ind / (len(x_df.columns) - 1)) * 0.9,
-                          label=label,
-                          zorder=1)
-
-            for ind, (_, ch_response) in enumerate(z_df.iloc[:, 1:].iteritems()):
-                if ind == 0:
-                    label = f"Theory"
-                else:
-                    label = None
-
-                theory_z = ch_response.values
-
-                z_ax.plot(x, theory_z,
-                          color="r",
-                          linestyle="-",
-                          alpha=1 - (ind / (len(x_df.columns) - 1)) * 0.9,
-                          label=label,
-                          zorder=1)
-
-        def format_figure(title, footnote, b_field=False):
-            # for text in figure.texts:
-            #     text.remove()
-            #
-            for legend in figure.legends:
-                legend.remove()
-
-            # Set the labels
-            z_ax.set_xlabel(f"Station")
-            if b_field is True:
-                x_ax.set_ylabel(f"EM Response\n(nT)")
-                z_ax.set_ylabel(f"EM Response\n(nT)")
-            else:
-                x_ax.set_ylabel(f"EM Response\n(nT/s)")
-                z_ax.set_ylabel(f"EM Response\n(nT/s)")
-            figure.suptitle(title)
-            x_ax.set_title(f"X Component")
-            z_ax.set_title(f"Z Component")
-
-            # Create the legend
-            handles, labels = z_ax.get_legend_handles_labels()
-
-            # sort both labels and handles by labels
-            figure.legend(handles, labels)
-
-            # Add the footnote
-            z_ax.text(0.995, 0.01, footnote,
-                      ha='right',
-                      va='bottom',
-                      size=6,
-                      transform=figure.transFigure)
-
-        def plot(theory_x_file, theory_z_file, maxwell_folder, conductance, b_field=False, log=False):
-            assert theory_x_file.is_file(), F"Theory file X does not exist."
-            assert theory_z_file.is_file(), F"Theory file Z does not exist."
-            assert maxwell_folder.is_dir(), F"Maxwell folder does not exist."
-            files = os_sorted(list(maxwell_folder.glob(f"*{conductance}.tem")))
+            min_ch, max_ch = 21, 44
+            channel_step = 1
+            num_chs = 4
+            channel_tuples = list(zip(np.arange(min_ch, max_ch, num_chs - 1),
+                                      np.arange(min_ch + num_chs - 1, max_ch + num_chs - 1, num_chs - 1)))
 
             count = 0
-            for filepath in files:
-                print(f"Plotting set {count + 1}/{len(files)}")
-                if log:
-                    x_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
-                    z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+            with PdfPages(out_pdf) as pdf:
+                format_files = []
+                for filepath_10, filepath_50 in list(zip(files_10, files_50))[:2]:
+                    print(f"Plotting set {count + 1}/{len(files_10)}")
+                    obj_10 = TEMFile().parse(filepath_10)
+                    obj_50 = TEMFile().parse(filepath_50)
+                    format_files.extend([obj_10, obj_50])
 
-                global footnote
-                footnote = ''
+                    for ch_range in channel_tuples:
+                        start_ch, end_ch = ch_range[0], ch_range[1]
+                        if ch_range[0] < min_ch:
+                            start_ch = min_ch
+                        if ch_range[1] > max_ch:
+                            end_ch = max_ch
+                        print(f"Plotting channel {start_ch} to {end_ch}")
 
-                # Plot the files
-                plot_maxwell(filepath, "b", 1, 100, name=f"{filepath.name}", station_shift=0, data_scaling=1., alpha=1.)
-                plot_theory(theory_x_file, theory_z_file)
-                if b_field is True:
-                    format_figure(f"Infinite Thin Sheet B-field Current Step-On - {conductance}S", footnote,
-                                  b_field=True)
-                else:
-                    format_figure(f"Infinite Thin Sheet dB/dt Current Step-On - {conductance}S", footnote,
-                                  b_field=False)
+                        plot_obj(ax_dict, obj_10, start_ch, end_ch,
+                                 name="10 Ribbons",
+                                 ch_step=channel_step,
+                                 station_shift=0,
+                                 data_scaling=1e-6,
+                                 lc="b"
+                                 )
 
-                pdf.savefig(figure, orientation='portrait')
+                        plot_obj(ax_dict, obj_50, start_ch, end_ch,
+                                 name="50 Ribbons",
+                                 ch_step=channel_step,
+                                 station_shift=0,
+                                 data_scaling=1e-6,
+                                 lc="r",
+                                 alpha=0.6
+                                 )
 
-                x_ax.clear()
-                z_ax.clear()
+                        format_figure(figure, ax_dict,
+                                      f"Infinite Thin Sheet\n"
+                                      f"Ribbon Comparison\n"
+                                      f"{obj_10.ch_times[start_ch - 1]}ms to {obj_10.ch_times[end_ch - 1]}ms",
+                                      format_files, start_ch, end_ch,
+                                      x_min=None,
+                                      x_max=None,
+                                      ch_step=channel_step,
+                                      incl_legend=True,
+                                      incl_legend_ls=True,
+                                      incl_legend_colors=True,
+                                      style_legend_by='time',
+                                      color_legend_by='line',
+                                      footnote="")
 
-                count += 1
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        log_scale([x_ax_log, y_ax_log, z_ax_log])
+                    count += 1
 
-        # """ B FIELD """
-        # """1 S"""
-        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 1S.PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=True, log=False)
-        #     os.startfile(output)
-        #
-        # """10 S"""
-        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 10S.PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=True, log=False)
-        #     os.startfile(output)
-        #
-        # """100 S"""
-        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 100S.PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=True, log=False)
-        #     os.startfile(output)
-        #
-        # """ Log Scale """
-        # """1 S"""
-        # output = sample_files.joinpath(
-        #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 1S (log).PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=True, log=True)
-        #     os.startfile(output)
-        #
-        # """10 S"""
-        # output = sample_files.joinpath(
-        #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 10S (log).PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=True, log=True)
-        #     os.startfile(output)
-        #
-        # """100 S"""
-        # output = sample_files.joinpath(
-        #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 100S (log).PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=True, log=True)
-        #     os.startfile(output)
+            if start_file:
+                os.startfile(str(out_pdf))
 
-        """ dBdt """
-        """1 S"""
-        output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 1S.PDF")
-        with PdfPages(output) as pdf:
-            theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt X.xlsx")
-            theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt Z.xlsx")
-            maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
+            runtime = get_runtime(t)
+            print(f"Maxwell infinite thin sheet ribbon comparison runtime: {runtime}")
+            logging_file.write(f"Maxwell infinite thin sheet ribbon comparison runtime: {runtime}\n")
+            logging_file.close()
 
-            plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=False, log=False)
-            os.startfile(output)
+        def compare_step_on_b_with_theory(start_file=False):
 
-        # """10 S"""
-        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 10S.PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=False, log=False)
-        #     os.startfile(output)
-        #
-        # """100 S"""
-        # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 100S.PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=False)
-        #     os.startfile(output)
-        #
-        # """ Log Scale """
-        # """1 S"""
-        # output = sample_files.joinpath(
-        #     r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 1S (log).PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 1S dBdt Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=False, log=True)
-        #     os.startfile(output)
-        #
-        # """10 S"""
-        # output = sample_files.joinpath(
-        #     r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 10S (log).PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 10S dBdt Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=False, log=True)
-        #     os.startfile(output)
-        #
-        # """100 S"""
-        # output = sample_files.joinpath(
-        #     r"Infinite Thin Sheet\Infinite Thin Sheet dBdt Step-on Comparison - 100S (log).PDF")
-        # with PdfPages(output) as pdf:
-        #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt X.xlsx")
-        #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\dBdt\Infinite sheet 100S dBdt Z.xlsx")
-        #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\dBdt")
-        #
-        #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=False, log=True)
-        #     os.startfile(output)
+            def plot_theory(x_df, z_df, start_ch, end_ch):
+                x = x_df.Position
 
-    def plot_df(axes, data, reference_file, ch_step=1, ls='-'):
-        x_ax, z_ax, x_ax_log, z_ax_log = axes
-        rainbow_colors = cm.jet(np.linspace(0, ch_step, (max_ch - min_ch) + 1))
-        x_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        x_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
-        z_ax.set_prop_cycle(cycler('color', rainbow_colors))
-        z_ax_log.set_prop_cycle(cycler('color', rainbow_colors))
+                for ind, (_, ch_response) in enumerate(x_df.iloc[:, start_ch + 1: end_ch + 1].iteritems()):
+                    if ind == 0:
+                        label = f"Theory"
+                    else:
+                        label = None
 
-        x_data = data[data.COMPONENT == "X"]
-        z_data = data[data.COMPONENT == "Z"]
+                    theory_x = ch_response.values
 
-        for ind, ch in enumerate(channels):
-            label = f"{reference_file.ch_times[min_ch + (ind * ch_step)]:.3f}ms"
+                    for ax in [x_ax, x_ax_log]:
+                        ax.plot(x, theory_x,
+                                color="r",
+                                alpha=0.6,
+                                label=label,
+                                zorder=1)
 
-            x = z_data.STATION.astype(float)
-            zz = z_data.loc[:, ch].astype(float)
-            xx = x_data.loc[:, ch].astype(float)
+                for ind, (_, ch_response) in enumerate(z_df.iloc[:, start_ch + 1: end_ch + 1].iteritems()):
+                    if ind == 0:
+                        label = f"Theory"
+                    else:
+                        label = None
 
-            for ax in [x_ax, x_ax_log]:
-                ax.plot(x, xx,
-                        label=label,
-                        ls=ls,
-                        zorder=1)
-            for ax in [z_ax, z_ax_log]:
-                ax.plot(x, zz,
-                        label=label,
-                        ls=ls,
-                        zorder=1)
+                    theory_z = ch_response.values
+
+                    for ax in [z_ax, z_ax_log]:
+                        ax.plot(x, theory_z,
+                                color="r",
+                                alpha=0.6,
+                                label=label,
+                                zorder=1)
+
+            log_file_path = sample_files.joinpath(
+                r"Infinite thin sheet\Infinite Thin Sheet - Maxwell vs Theory log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print(f"Comparing Maxwell with theory for infinite thin sheet models")
+            logging_file.write(f">>Comparing Maxwell with theory for infinite thin sheet models\n\n")
+
+            figure, ((x_ax, z_ax), (x_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='all', sharey='none')
+            ax_dict = {"X": (x_ax, x_ax_log), "Y": (None, None), "Z": (z_ax, z_ax_log)}
+            axes = [x_ax, z_ax, x_ax_log, z_ax_log]
+            figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+            log_scale([x_ax_log, z_ax_log])
+
+            t = time.time()
+
+            conductances = ["1S", "10S", "100S"]
+            measurements = ["dBdt", "B"]
+
+            min_ch, max_ch = 1, 32
+            channel_step = 1
+            num_chs = 4
+            channel_tuples = list(zip(np.arange(min_ch, max_ch, num_chs - 1),
+                                      np.arange(min_ch + num_chs - 1, max_ch + num_chs - 1, num_chs - 1)))
+
+            for measurement in measurements:
+                for conductance in conductances:
+                    print(f"Plotting {measurement} at {conductance}.")
+                    out_pdf = sample_files.joinpath(
+                        fr"Infinite thin Sheet\Infinite Thin Sheet - Maxwell vs Theory ({measurement},{conductance}).PDF")
+
+                    maxwell_dir = sample_files.joinpath(fr"Infinite thin sheet\Maxwell\{measurement}")
+                    theory_dir = sample_files.joinpath(fr"Infinite thin sheet\Theory\{measurement}")
+
+                    theory_x_file = theory_dir.joinpath(fr"Infinite sheet {conductance} {measurement} X.xlsx")
+                    theory_z_file = theory_dir.joinpath(fr"Infinite sheet {conductance} {measurement} Z.xlsx")
+                    assert all([maxwell_dir.exists(), theory_dir.exists(), theory_x_file.exists(),
+                                theory_z_file.exists()]), f"One or more files or directories don't exist."
+
+                    x_df = pd.read_excel(theory_x_file, header=4).dropna(axis=1)
+                    z_df = pd.read_excel(theory_z_file, header=4).dropna(axis=1)
+
+                    maxwell_files = os_sorted(list(maxwell_dir.glob(f"*{conductance}.tem")))
+
+                    count = 0
+                    with PdfPages(out_pdf) as pdf:
+                        format_files = []
+                        for file in maxwell_files:
+                            print(f"Plotting {file.stem} ({count +1}/{len(maxwell_files)})")
+
+                            print(f"Comparing Maxwell file {'/'.join(file.parts[-2:])} with theory files {theory_x_file.stem}, {theory_z_file.stem}")
+                            max_obj = TEMFile().parse(file)
+                            format_files.append(max_obj)
+
+                            for ch_range in channel_tuples:
+                                start_ch, end_ch = ch_range[0], ch_range[1]
+                                if ch_range[0] < min_ch:
+                                    start_ch = min_ch
+                                if ch_range[1] > max_ch:
+                                    end_ch = max_ch
+                                print(f"Plotting channel {start_ch} to {end_ch}")
+
+                                plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                                         name="Maxwell",
+                                         ch_step=channel_step,
+                                         station_shift=0,
+                                         data_scaling=1,
+                                         lc=colors.get("Maxwell"),
+                                         alpha=1.
+                                         )
+
+                                plot_theory(x_df, z_df, start_ch, end_ch)
+
+                                format_figure(figure, ax_dict,
+                                              f"Infinite Thin Sheet\n"
+                                              f"Maxwell vs Theory\n"
+                                              f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
+                                              format_files, start_ch, end_ch,
+                                              x_min=None,
+                                              x_max=None,
+                                              b_field=True if measurement == 'B' else False,
+                                              ch_step=channel_step,
+                                              incl_legend=True,
+                                              incl_legend_ls=True,
+                                              incl_legend_colors=True,
+                                              style_legend_by='time',
+                                              color_legend_by='line',
+                                              footnote="")
+
+                                pdf.savefig(figure, orientation='landscape')
+                                clear_axes(axes)
+                                log_scale([x_ax_log, z_ax_log])
+                            count += 1
+
+            #
+            # def plot_maxwell(filepath, color, ch_start, ch_end, name="", station_shift=0, data_scaling=1., alpha=1.):
+            #
+            #     parser = TEMFile()
+            #     file = parser.parse(filepath)
+            #
+            #     print(f"Plotting {filepath.name}.")
+            #
+            #     x_data = file.data[file.data.COMPONENT == "X"]
+            #     z_data = file.data[file.data.COMPONENT == "Z"]
+            #
+            #     channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
+            #     min_ch = ch_start - 1
+            #     max_ch = min(ch_end - 1, len(channels) - 1)
+            #     plotting_channels = channels[min_ch: max_ch + 1]
+            #
+            #     for ind, ch in enumerate(plotting_channels):
+            #         if ind == 0:
+            #             label = f"{name}"
+            #             global footnote
+            #
+            #             if min_ch == max_ch:
+            #                 footnote += f"Maxwell file plotting channel {min_ch + 1} ({file.ch_times[max_ch]:.3f}ms).  "
+            #             else:
+            #                 footnote += f"Maxwell file plotting channels {min_ch + 1}-{max_ch + 1}" \
+            #                             f" ({file.ch_times[min_ch]:.3f}ms-{file.ch_times[max_ch]:.3f}ms).  "
+            #         else:
+            #             label = None
+            #
+            #         x = z_data.STATION.astype(float) + station_shift
+            #         zz = z_data.loc[:, ch].astype(float) * data_scaling  # * -1
+            #         xx = x_data.loc[:, ch].astype(float) * data_scaling  # * -1
+            #
+            #         x_ax.plot(x, xx,
+            #                   color=color,
+            #                   linestyle="-",
+            #                   # alpha=alpha,
+            #                   alpha=1 - (ind / (len(plotting_channels))) * 0.9,
+            #                   label=label,
+            #                   zorder=1)
+            #         z_ax.plot(x, zz,
+            #                   color=color,
+            #                   linestyle="-",
+            #                   # alpha=alpha,
+            #                   alpha=1 - (ind / (len(plotting_channels))) * 0.9,
+            #                   label=label,
+            #                   zorder=1)
+            #
+            #         x_ax.set_xlim([x.min(), x.max()])
+            #         z_ax.set_xlim([x.min(), x.max()])
+            #
+            # def format_figure(title, footnote, b_field=False):
+            #     # for text in figure.texts:
+            #     #     text.remove()
+            #     #
+            #     for legend in figure.legends:
+            #         legend.remove()
+            #
+            #     # Set the labels
+            #     z_ax.set_xlabel(f"Station")
+            #     if b_field is True:
+            #         x_ax.set_ylabel(f"EM Response\n(nT)")
+            #         z_ax.set_ylabel(f"EM Response\n(nT)")
+            #     else:
+            #         x_ax.set_ylabel(f"EM Response\n(nT/s)")
+            #         z_ax.set_ylabel(f"EM Response\n(nT/s)")
+            #     figure.suptitle(title)
+            #     x_ax.set_title(f"X Component")
+            #     z_ax.set_title(f"Z Component")
+            #
+            #     # Create the legend
+            #     handles, labels = z_ax.get_legend_handles_labels()
+            #
+            #     # sort both labels and handles by labels
+            #     figure.legend(handles, labels)
+            #
+            #     # Add the footnote
+            #     z_ax.text(0.995, 0.01, footnote,
+            #               ha='right',
+            #               va='bottom',
+            #               size=6,
+            #               transform=figure.transFigure)
+            #
+            # def plot(theory_x_file, theory_z_file, maxwell_folder, conductance, b_field=False, log=False):
+            #     assert theory_x_file.is_file(), F"Theory file X does not exist."
+            #     assert theory_z_file.is_file(), F"Theory file Z does not exist."
+            #     assert maxwell_folder.is_dir(), F"Maxwell folder does not exist."
+            #     files = os_sorted(list(maxwell_folder.glob(f"*{conductance}.tem")))
+            #
+            #     count = 0
+            #     for filepath in files:
+            #         print(f"Plotting set {count + 1}/{len(files)}")
+            #         if log:
+            #             x_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+            #             z_ax.set_yscale('symlog', subs=list(np.arange(2, 10, 1)), linthresh=10, linscale=1. / math.log(10))
+            #
+            #         global footnote
+            #         footnote = ''
+            #
+            #         # Plot the files
+            #         plot_maxwell(filepath, "b", 1, 100, name=f"{filepath.name}", station_shift=0, data_scaling=1., alpha=1.)
+            #         plot_theory(theory_x_file, theory_z_file)
+            #         if b_field is True:
+            #             format_figure(f"Infinite Thin Sheet B-field Current Step-On - {conductance}S", footnote,
+            #                           b_field=True)
+            #         else:
+            #             format_figure(f"Infinite Thin Sheet dB/dt Current Step-On - {conductance}S", footnote,
+            #                           b_field=False)
+            #
+            #         pdf.savefig(figure, orientation='portrait')
+            #
+            #         x_ax.clear()
+            #         z_ax.clear()
+            #
+            #         count += 1
+
+            # """ B FIELD """
+            # """1 S"""
+            # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 1S.PDF")
+            # with PdfPages(output) as pdf:
+            #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B X.xlsx")
+            #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B Z.xlsx")
+            #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+            #
+            #     plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=True, log=False)
+            #     os.startfile(output)
+            #
+            # """10 S"""
+            # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 10S.PDF")
+            # with PdfPages(output) as pdf:
+            #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B X.xlsx")
+            #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B Z.xlsx")
+            #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+            #
+            #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=True, log=False)
+            #     os.startfile(output)
+            #
+            # """100 S"""
+            # output = sample_files.joinpath(r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 100S.PDF")
+            # with PdfPages(output) as pdf:
+            #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B X.xlsx")
+            #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B Z.xlsx")
+            #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+            #
+            #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=True, log=False)
+            #     os.startfile(output)
+            #
+            # """ Log Scale """
+            # """1 S"""
+            # output = sample_files.joinpath(
+            #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 1S (log).PDF")
+            # with PdfPages(output) as pdf:
+            #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B X.xlsx")
+            #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 1S B Z.xlsx")
+            #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+            #
+            #     plot(theory_x_file, theory_z_file, maxwell_folder, "1", b_field=True, log=True)
+            #     os.startfile(output)
+            #
+            # """10 S"""
+            # output = sample_files.joinpath(
+            #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 10S (log).PDF")
+            # with PdfPages(output) as pdf:
+            #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B X.xlsx")
+            #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 10S B Z.xlsx")
+            #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+            #
+            #     plot(theory_x_file, theory_z_file, maxwell_folder, "10", b_field=True, log=True)
+            #     os.startfile(output)
+            #
+            # """100 S"""
+            # output = sample_files.joinpath(
+            #     r"Infinite Thin Sheet\Infinite Thin Sheet B-field Step-on Comparison - 100S (log).PDF")
+            # with PdfPages(output) as pdf:
+            #     theory_x_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B X.xlsx")
+            #     theory_z_file = sample_files.joinpath(r"Infinite Thin Sheet\Theory\B\Infinite sheet 100S B Z.xlsx")
+            #     maxwell_folder = sample_files.joinpath(r"Infinite Thin Sheet\Maxwell\B")
+            #
+            #     plot(theory_x_file, theory_z_file, maxwell_folder, "100", b_field=True, log=True)
+            #     os.startfile(output)
+
+                    if start_file:
+                        os.startfile(str(out_pdf))
+                    break
+                break
+
+            runtime = get_runtime(t)
+            print(f"Maxwell infinite thin sheet ribbon comparison runtime: {runtime}")
+            logging_file.write(f"Maxwell infinite thin sheet ribbon comparison runtime: {runtime}\n")
+            logging_file.close()
+
+        # compare_maxwell_ribbons(start_file=True)
+        compare_step_on_b_with_theory(start_file=True)
 
     def plot_overburden():
 
@@ -4669,13 +4864,12 @@ if __name__ == '__main__':
         os.startfile(out_pdf)
 
     # TODO Change "MUN" to "EM3D"
-    plot_aspect_ratio()
+    # plot_aspect_ratio()
     # plot_two_way_induction()
     # plot_run_on_comparison()
     # plot_run_on_convergence()
     # tabulate_run_on_convergence()
-    # compare_maxwell_ribbons()
-    # compare_step_on_b_with_theory()
+    plot_infinite_thin_sheet()
     # plot_overburden()
     # plot_bentplate()
     # test_savgol_filter()
@@ -4689,6 +4883,5 @@ if __name__ == '__main__':
     #     r"Two-way induction\300x100\100S\MUN\MUN plotting test.PDF")))
     # tester.print_pdf()
 
-    logging_file.close()
     # os.startfile(log_file_path)
     app.exec_()
