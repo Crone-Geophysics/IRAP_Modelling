@@ -53,6 +53,8 @@ tem_plotterUI, _ = uic.loadUiType(TEMPlotterUIFile)
 test_runnerUI, _ = uic.loadUiType(TestRunnerUIFile)
 
 matplotlib.use('Qt5Agg')
+# matplotlib.rc('lines', color='gray')
+
 rainbow_colors = iter(cm.rainbow(np.linspace(0, 1, 20)))
 quant_colors = np.nditer(np.array(plt.rcParams['axes.prop_cycle'].by_key()['color']))
 
@@ -1926,21 +1928,22 @@ if __name__ == '__main__':
     sample_files = Path(__file__).parents[1].joinpath('sample_files')
 
     def plot_obj(ax_dict, file, ch_start, ch_end, ch_step=1, ch_times=None, name="", station_shift=0,
-                 data_scaling=1., alpha=1., ls=None, lc=None,
-                 incl_label=True, filter=False):
-
-        rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
-        line_styles = ['-', '--', '-.', ':']
+                 data_scaling=1., alpha=1., ls=None, lc=None, filter=False):
 
         x_ax, x_ax_log = ax_dict.get('X')
         y_ax, y_ax_log = ax_dict.get('Y')
         z_ax, z_ax_log = ax_dict.get('Z')
         axes = [x_ax, x_ax_log, y_ax, y_ax_log, z_ax, z_ax_log]
 
+        rainbow_colors = cm.jet(np.linspace(0, ch_step, (ch_end - ch_start) + 1))
+        line_styles = ['-', '--', '-.', ':']
+
         for ax in axes:
             if ax:
-                ax.set_prop_cycle(cycler('color', rainbow_colors))
-                ax.set_prop_cycle(cycler('linestyle', line_styles))
+                if lc is None:
+                    ax.set_prop_cycle(cycler("color", rainbow_colors))
+                else:
+                    ax.set_prop_cycle(cycler("linestyle", line_styles))
 
         if isinstance(file, TEMFile):
             x_data = file.data[file.data.COMPONENT == "X"]
@@ -1979,15 +1982,12 @@ if __name__ == '__main__':
             raise ValueError(f"Channel {ch_end} is beyond the number of channels ({len(channels)}).")
 
         for ind, ch in enumerate(plotting_channels):
-            # if incl_label is True:
             if ind == 0:
                 if not name:
                     name = get_filetype(file)
                 label = name
             else:
                 label = None
-            # else:
-            #     label = None
 
             if isinstance(file, TEMFile):
                 x = z_data.STATION.astype(float) + station_shift
@@ -2865,117 +2865,123 @@ if __name__ == '__main__':
         # plot_all('100S', start_file=False)
         plot_all('1000S', start_file=True)
 
-    def plot_run_on_comparison():
-        tester = TestRunner()
-        tester.show()
+    def plot_run_on_effect():
 
-        """Run the run-on effects tests"""
-        tester.plot_run_on_comparison_rbtn.setChecked(True)
+        def plot_run_on_comparison():
+            tester = TestRunner()
+            tester.show()
 
-        tester.test_name_edit.setText("Maxwell Run-on Effect Calculation")
-        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\600x600C")),
-                       file_type='Maxwell')
+            """Run the run-on effects tests"""
+            tester.plot_run_on_comparison_rbtn.setChecked(True)
 
-        tester.table.item(0, 2).setText("0.000001")
-        # tester.table.item(0, 4).setText("6")
-        # tester.table.item(0, 5).setText("44")
-        tester.table.item(0, 4).setText("45")
-        tester.table.item(0, 5).setText("68")
+            tester.test_name_edit.setText("Maxwell Run-on Effect Calculation")
+            tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\600x600C")),
+                           file_type='Maxwell')
 
-        # tester.include_edit.setText("150, B")
-        # tester.include_edit.editingFinished.emit()
-        # tester.output_filepath_edit.setText(
-        #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 150m plate, 1,000 S.PDF")))
-        # tester.print_pdf()
-        #
-        # tester.include_edit.setText("150, C")
-        # tester.include_edit.editingFinished.emit()
-        # tester.output_filepath_edit.setText(
-        #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 150m plate, 10,000 S.PDF")))
-        # tester.print_pdf()
-        #
-        # tester.include_edit.setText("600, B")
-        # tester.include_edit.editingFinished.emit()
-        # tester.output_filepath_edit.setText(
-        #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 600m plate, 1,000 S.PDF")))
-        # tester.print_pdf()
-        #
-        tester.include_edit.setText("600, C")
-        tester.include_edit.editingFinished.emit()
-        tester.output_filepath_edit.setText(
-            str(sample_files.joinpath(r"Run-on effect\On-time formula.PDF")))
-            # str(sample_files.joinpath(r"Run-on effect test\Run on effect - 600m plate, 10,000 S, full waveform.PDF")))
-        tester.print_pdf()
+            tester.table.item(0, 2).setText("0.000001")
+            # tester.table.item(0, 4).setText("6")
+            # tester.table.item(0, 5).setText("44")
+            tester.table.item(0, 4).setText("45")
+            tester.table.item(0, 5).setText("68")
 
-    def plot_run_on_convergence():
-        tester = TestRunner()
-        tester.show()
-        """Plot the half-cycle convergence of run-on effect"""
-        tester.plot_run_on_convergence_rbtn.setChecked(True)
+            # tester.include_edit.setText("150, B")
+            # tester.include_edit.editingFinished.emit()
+            # tester.output_filepath_edit.setText(
+            #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 150m plate, 1,000 S.PDF")))
+            # tester.print_pdf()
+            #
+            # tester.include_edit.setText("150, C")
+            # tester.include_edit.editingFinished.emit()
+            # tester.output_filepath_edit.setText(
+            #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 150m plate, 10,000 S.PDF")))
+            # tester.print_pdf()
+            #
+            # tester.include_edit.setText("600, B")
+            # tester.include_edit.editingFinished.emit()
+            # tester.output_filepath_edit.setText(
+            #     str(sample_files.joinpath(r"Run-on effect\Run on effect - 600m plate, 1,000 S.PDF")))
+            # tester.print_pdf()
+            #
+            tester.include_edit.setText("600, C")
+            tester.include_edit.editingFinished.emit()
+            tester.output_filepath_edit.setText(
+                str(sample_files.joinpath(r"Run-on effect\On-time formula.PDF")))
+                # str(sample_files.joinpath(r"Run-on effect test\Run on effect - 600m plate, 10,000 S, full waveform.PDF")))
+            tester.print_pdf()
 
-        tester.test_name_edit.setText("Run-on Effect Convergence")
-        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\100s")),
-                       file_type='Maxwell')
-        tester.table.item(0, 2).setText("0.000001")
+        def plot_run_on_convergence():
+            tester = TestRunner()
+            tester.show()
+            """Plot the half-cycle convergence of run-on effect"""
+            tester.plot_run_on_convergence_rbtn.setChecked(True)
 
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect\Run-on convergence - 150m plate, 1,000 S.PDF")))
-        tester.include_edit.setText("150, B")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
-        #
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect\Run-on convergence - 150m plate, 10,000 S.PDF")))
-        # tester.include_edit.setText("150, C")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
+            tester.test_name_edit.setText("Run-on Effect Convergence")
+            tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\100s")),
+                           file_type='Maxwell')
+            tester.table.item(0, 2).setText("0.000001")
 
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect\Run-on convergence - 600m plate, 1,000 S.PDF")))
-        tester.include_edit.setText("600, B")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
+            tester.output_filepath_edit.setText(str(sample_files.joinpath(
+                r"Run-on effect\Run-on convergence - 150m plate, 1,000 S.PDF")))
+            tester.include_edit.setText("150, B")
+            tester.include_edit.editingFinished.emit()
+            tester.print_pdf()
+            #
+            # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            #     r"Run-on effect\Run-on convergence - 150m plate, 10,000 S.PDF")))
+            # tester.include_edit.setText("150, C")
+            # tester.include_edit.editingFinished.emit()
+            # tester.print_pdf()
 
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect\Run-on convergence - 600m plate, 10,000 S.PDF")))
-        # tester.include_edit.setText("600, C")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
+            tester.output_filepath_edit.setText(str(sample_files.joinpath(
+                r"Run-on effect\Run-on convergence - 600m plate, 1,000 S.PDF")))
+            tester.include_edit.setText("600, B")
+            tester.include_edit.editingFinished.emit()
+            tester.print_pdf()
 
-    def tabulate_run_on_convergence():
-        tester = TestRunner()
-        tester.show()
-        """Tabulate the number of half-cycles required for convergence of run-on effect"""
-        tester.table_run_on_convergence_rbtn.setChecked(True)
+            # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            #     r"Run-on effect\Run-on convergence - 600m plate, 10,000 S.PDF")))
+            # tester.include_edit.setText("600, C")
+            # tester.include_edit.editingFinished.emit()
+            # tester.print_pdf()
 
-        tester.test_name_edit.setText("Run-on Effect Convergence")
-        tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\100s")),
-                       file_type='Maxwell')
-        tester.table.item(0, 2).setText("0.000001")
+        def tabulate_run_on_convergence():
+            tester = TestRunner()
+            tester.show()
+            """Tabulate the number of half-cycles required for convergence of run-on effect"""
+            tester.table_run_on_convergence_rbtn.setChecked(True)
 
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect\Run-on Effect Convergence - 150m plate, 1,000 S.CSV")))
-        # tester.include_edit.setText("150, B")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
+            tester.test_name_edit.setText("Run-on Effect Convergence")
+            tester.add_row(folderpath=str(sample_files.joinpath(r"Run-on effect\100s")),
+                           file_type='Maxwell')
+            tester.table.item(0, 2).setText("0.000001")
 
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect\Run-on Effect Convergence - 150m plate, 10,000 S.CSV")))
-        tester.include_edit.setText("150, C")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
+            # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            #     r"Run-on effect\Run-on Effect Convergence - 150m plate, 1,000 S.CSV")))
+            # tester.include_edit.setText("150, B")
+            # tester.include_edit.editingFinished.emit()
+            # tester.print_pdf()
 
-        # tester.output_filepath_edit.setText(str(sample_files.joinpath(
-        #     r"Run-on effect\Run-on Effect Convergence - 600m plate, 1,000 S.CSV")))
-        # tester.include_edit.setText("600, B")
-        # tester.include_edit.editingFinished.emit()
-        # tester.print_pdf()
+            tester.output_filepath_edit.setText(str(sample_files.joinpath(
+                r"Run-on effect\Run-on Effect Convergence - 150m plate, 10,000 S.CSV")))
+            tester.include_edit.setText("150, C")
+            tester.include_edit.editingFinished.emit()
+            tester.print_pdf()
 
-        tester.output_filepath_edit.setText(str(sample_files.joinpath(
-            r"Run-on effect\Run-on Effect Convergence - 600m plate, 10,000 S.CSV")))
-        tester.include_edit.setText("600, C")
-        tester.include_edit.editingFinished.emit()
-        tester.print_pdf()
+            # tester.output_filepath_edit.setText(str(sample_files.joinpath(
+            #     r"Run-on effect\Run-on Effect Convergence - 600m plate, 1,000 S.CSV")))
+            # tester.include_edit.setText("600, B")
+            # tester.include_edit.editingFinished.emit()
+            # tester.print_pdf()
+
+            tester.output_filepath_edit.setText(str(sample_files.joinpath(
+                r"Run-on effect\Run-on Effect Convergence - 600m plate, 10,000 S.CSV")))
+            tester.include_edit.setText("600, C")
+            tester.include_edit.editingFinished.emit()
+            tester.print_pdf()
+
+        plot_run_on_comparison()
+        plot_run_on_convergence()
+        tabulate_run_on_convergence()
 
     def plot_infinite_thin_sheet():
 
@@ -3134,7 +3140,7 @@ if __name__ == '__main__':
                 for conductance in conductances:
                     print(f"Plotting {measurement} at {conductance}.")
                     out_pdf = sample_files.joinpath(
-                        fr"Infinite thin Sheet\Infinite Thin Sheet - Maxwell vs Theory ({measurement},{conductance}).PDF")
+                        fr"Infinite thin Sheet\Infinite Thin Sheet - Maxwell vs Theory ({measurement}, {conductance}).PDF")
 
                     maxwell_dir = sample_files.joinpath(fr"Infinite thin sheet\Maxwell\{measurement}")
                     theory_dir = sample_files.joinpath(fr"Infinite thin sheet\Theory\{measurement}")
@@ -3144,8 +3150,8 @@ if __name__ == '__main__':
                     assert all([maxwell_dir.exists(), theory_dir.exists(), theory_x_file.exists(),
                                 theory_z_file.exists()]), f"One or more files or directories don't exist."
 
-                    x_df = pd.read_excel(theory_x_file, header=4).dropna(axis=1)
-                    z_df = pd.read_excel(theory_z_file, header=4).dropna(axis=1)
+                    x_df = pd.read_excel(theory_x_file, header=4, engine='openpyxl').dropna(axis=1)
+                    z_df = pd.read_excel(theory_z_file, header=4, engine='openpyxl').dropna(axis=1)
 
                     maxwell_files = os_sorted(list(maxwell_dir.glob(f"*{conductance}.tem")))
 
@@ -3171,20 +3177,25 @@ if __name__ == '__main__':
                                          name="Maxwell",
                                          ch_step=channel_step,
                                          station_shift=0,
-                                         data_scaling=1,
+                                         data_scaling=1 if measurement == 'dBdt' else -1,
                                          lc=colors.get("Maxwell"),
                                          alpha=1.
                                          )
 
                                 plot_theory(x_df, z_df, start_ch, end_ch)
 
+                                size = re.search(r"(\d+x\d+).*", file.stem).group(1)
+                                footnote = ""
+                                if measurement == "B":
+                                    footnote = "Maxwell file data multiplied by -1."
+
                                 format_figure(figure, ax_dict,
-                                              f"Infinite Thin Sheet\n"
-                                              f"Maxwell vs Theory\n"
+                                              f"Infinite Thin Sheet: Current Step-On, Maxwell vs Theory\n"
+                                              f"{size} {measurement}, {conductance}\n"
                                               f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
                                               format_files, start_ch, end_ch,
-                                              x_min=None,
-                                              x_max=None,
+                                              x_min=max_obj.data.STATION.min(),
+                                              x_max=max_obj.data.STATION.max(),
                                               b_field=True if measurement == 'B' else False,
                                               ch_step=channel_step,
                                               incl_legend=True,
@@ -3192,7 +3203,7 @@ if __name__ == '__main__':
                                               incl_legend_colors=True,
                                               style_legend_by='time',
                                               color_legend_by='line',
-                                              footnote="")
+                                              footnote=footnote)
 
                                 pdf.savefig(figure, orientation='landscape')
                                 clear_axes(axes)
@@ -3382,16 +3393,200 @@ if __name__ == '__main__':
 
                     if start_file:
                         os.startfile(str(out_pdf))
-                    break
-                break
 
             runtime = get_runtime(t)
-            print(f"Maxwell infinite thin sheet ribbon comparison runtime: {runtime}")
-            logging_file.write(f"Maxwell infinite thin sheet ribbon comparison runtime: {runtime}\n")
+            print(f"Maxwell infinite thin sheet theory comparison runtime: {runtime}")
+            logging_file.write(f"Maxwell infinite thin sheet theory comparison runtime: {runtime}\n")
             logging_file.close()
 
         # compare_maxwell_ribbons(start_file=True)
         compare_step_on_b_with_theory(start_file=True)
+
+    def plot_infinite_half_sheet():
+
+        def plot_loop_on_origin(start_file=False):
+            log_file_path = sample_files.joinpath(r"Infinite half sheet\Infinite half sheet (loop on origin) log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print(f"Plotting infinite half sheet with loop on origin")
+            logging_file.write(f">>Plotting infinite half sheet with loop on origin\n\n")
+            figure, ((x_ax, y_ax, z_ax), (x_ax_log, y_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=3, sharex='all', sharey='none')
+            ax_dict = {"X": (x_ax, x_ax_log), "Y": (y_ax, y_ax_log), "Z": (z_ax, z_ax_log)}
+            axes = [x_ax, y_ax, z_ax, x_ax_log, y_ax_log, z_ax_log]
+            figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+            log_scale([x_ax_log, y_ax_log, z_ax_log])
+
+            maxwell_dir = sample_files.joinpath(r"Infinite half sheet\Loop Centered at Origin")
+
+            maxwell_files = list(maxwell_dir.glob("*.TEM"))
+
+            out_pdf = sample_files.joinpath(r"Infinite half sheet\Infinite half sheet (loop on origin).PDF")
+
+            unique_files = os_sorted(get_unique_files([maxwell_files]))
+
+            count = 0
+            with PdfPages(out_pdf) as pdf:
+                for stem in unique_files:
+                    print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
+                    format_files = []
+
+                    max_obj = None
+
+                    max_file = maxwell_dir.joinpath(stem).with_suffix(".TEM")
+
+                    if not max_file.exists():
+                        logging_file.write(f"{stem} missing from Maxwell.\n")
+                        print(f"{stem} missing from Maxwell.")
+                    else:
+                        max_obj = TEMFile().parse(max_file)
+                        format_files.append(max_obj)
+
+                    if not format_files:
+                        logging_file.write(f"No files found for {stem}.")
+                        print(f"No files found for {stem}.")
+                        continue
+
+                    for ch_range in channel_tuples:
+                        start_ch, end_ch = ch_range[0], ch_range[1]
+                        if ch_range[0] < min_ch:
+                            start_ch = min_ch
+                        if ch_range[1] > max_ch:
+                            end_ch = max_ch
+                        print(f"Plotting channel {start_ch} to {end_ch}")
+
+                        if max_obj:
+                            plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=0,
+                                     data_scaling=1e-6,
+                                     lc=colors.get("Maxwell")
+                                     )
+
+                        format_figure(figure, ax_dict,
+                                      f"Infinite Half Sheet: Loop On Origin\n"
+                                      f"{stem}\n"
+                                      f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
+                                      format_files, start_ch, end_ch,
+                                      x_min=None,
+                                      x_max=None,
+                                      ch_step=channel_step,
+                                      incl_legend=True,
+                                      incl_legend_ls=True,
+                                      incl_legend_colors=True,
+                                      style_legend_by='time',
+                                      color_legend_by='file',
+                                      footnote="")
+
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        log_scale([x_ax_log, y_ax_log, z_ax_log])
+                    count += 1
+
+                if start_file:
+                    os.startfile(str(out_pdf))
+
+                runtime = get_runtime(t)
+                print(f"Infinite half sheet (loop on origin) runtime: {runtime}")
+                logging_file.write(f"Infinite half sheet (loop on origin) runtime: {runtime}\n")
+                logging_file.close()
+
+        def plot_loop_on_175w(start_file=False):
+            log_file_path = sample_files.joinpath(r"Infinite half sheet\Infinite half sheet (loop on 175W) log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print(f"Plotting infinite half sheet with loop on 175W")
+            logging_file.write(f">>Plotting infinite half sheet with loop on 175W\n\n")
+            figure, ((x_ax, y_ax, z_ax), (x_ax_log, y_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=3, sharex='all', sharey='none')
+            ax_dict = {"X": (x_ax, x_ax_log), "Y": (y_ax, y_ax_log), "Z": (z_ax, z_ax_log)}
+            axes = [x_ax, y_ax, z_ax, x_ax_log, y_ax_log, z_ax_log]
+            figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+            log_scale([x_ax_log, y_ax_log, z_ax_log])
+
+            maxwell_dir = sample_files.joinpath(r"Infinite half sheet\Loop Centered at 175W")
+
+            maxwell_files = list(maxwell_dir.glob("*.TEM"))
+
+            out_pdf = sample_files.joinpath(r"Infinite half sheet\Infinite half sheet (loop on 175W).PDF")
+
+            unique_files = os_sorted(get_unique_files([maxwell_files]))
+
+            count = 0
+            with PdfPages(out_pdf) as pdf:
+                for stem in unique_files:
+                    print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
+                    format_files = []
+
+                    max_obj = None
+
+                    max_file = maxwell_dir.joinpath(stem).with_suffix(".TEM")
+
+                    if not max_file.exists():
+                        logging_file.write(f"{stem} missing from Maxwell.\n")
+                        print(f"{stem} missing from Maxwell.")
+                    else:
+                        max_obj = TEMFile().parse(max_file)
+                        format_files.append(max_obj)
+
+                    if not format_files:
+                        logging_file.write(f"No files found for {stem}.")
+                        print(f"No files found for {stem}.")
+                        continue
+
+                    for ch_range in channel_tuples:
+                        start_ch, end_ch = ch_range[0], ch_range[1]
+                        if ch_range[0] < min_ch:
+                            start_ch = min_ch
+                        if ch_range[1] > max_ch:
+                            end_ch = max_ch
+                        print(f"Plotting channel {start_ch} to {end_ch}")
+
+                        if max_obj:
+                            plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=0,
+                                     data_scaling=1e-6,
+                                     lc=colors.get("Maxwell")
+                                     )
+
+                        format_figure(figure, ax_dict,
+                                      f"Infinite Half Sheet: Loop On 175W\n"
+                                      f"{stem}\n"
+                                      f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
+                                      format_files, start_ch, end_ch,
+                                      x_min=None,
+                                      x_max=None,
+                                      ch_step=channel_step,
+                                      incl_legend=True,
+                                      incl_legend_ls=True,
+                                      incl_legend_colors=True,
+                                      style_legend_by='time',
+                                      color_legend_by='file',
+                                      footnote="")
+
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        log_scale([x_ax_log, y_ax_log, z_ax_log])
+                    count += 1
+
+                if start_file:
+                    os.startfile(str(out_pdf))
+
+                runtime = get_runtime(t)
+                print(f"Infinite half sheet (loop on 175W) runtime: {runtime}")
+                logging_file.write(f"Infinite half sheet (loop on 175W) runtime: {runtime}\n")
+                logging_file.close()
+
+        # global min_ch, max_ch, channel_step
+        min_ch, max_ch = 21, 44
+        channel_step = 1
+        num_chs = 4
+        channel_tuples = list(zip(np.arange(min_ch, max_ch, num_chs - 1),
+                                  np.arange(min_ch + num_chs - 1, max_ch + num_chs - 1, num_chs - 1)))
+
+        t = time.time()
+
+        plot_loop_on_origin(start_file=True)
+        # plot_loop_on_175w(start_file=True)
 
     def plot_overburden():
 
@@ -3406,104 +3601,204 @@ if __name__ == '__main__':
             residual_file.data.loc[:, channels] = residual_data
             return residual_file
 
-        def plot_overburden_and_plates(ch_step=1):
-            """ Plot the overburden on its own """
+        def plot_overburden_and_plates(title, ch_step=1, start_file=False):
 
-            def plot_plates(ch_step=1):
-                print(f">> Plotting plates alone")
-                # Plot the plate models on their own
-                for maxwell_file, mun_file, title in zip([maxwell_plate1_file, maxwell_plate2_file],
-                                                         [mun_plate1_file, mun_plate2_file],
-                                                         ["Plate 1 Only", "Plate 2 Only"]):
-                    plot_max(axes,
-                             maxwell_file,
-                             min_ch,
-                             max_ch,
-                             ch_step=ch_step,
-                             name="Maxwell",
-                             alpha=0.6,
-                             line_color=None,
-                             ls=styles.get("Maxwell"),
-                             data_scaling=1e-6,
-                             single_file=True,
-                             incl_label=True)
+            log_file_path = sample_files.joinpath(fr"Overburden\{title} log.txt")
+            logging_file = open(str(log_file_path), "w+")
 
-                    plot_mun(axes,
-                             mun_file,
-                             min_ch,
-                             max_ch,
-                             ch_step=ch_step,
-                             name="MUN",
-                             alpha=1.,
-                             line_color=None,
-                             ls=styles.get("MUN"),
-                             single_file=True,
-                             incl_label=False)
+            print(f"Plotting {title}")
+            logging_file.write(f">>Plotting {title}\n\n")
 
-                    format_figure(figure,
-                                  "Overburden Models\n" + title, [maxwell_file, mun_file],
-                                  min_ch,
-                                  max_ch,
-                                  incl_legend=True,
-                                  extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
-                                  extra_labels=["Maxwell", "MUN"])
+            maxwell_dir = sample_files.joinpath(r"Overburden\Maxwell\Overburden+Conductor Revised")
+            mun_dir = sample_files.joinpath(r"Overburden\MUN\Overburden + plate")
 
-                    pdf.savefig(figure, orientation='landscape')
-                    clear_axes(axes)
-                    log_scale(x_ax_log, z_ax_log)
+            maxwell_files = list(maxwell_dir.glob("*Only*.TEM"))
+            mun_files = list(mun_dir.glob("*Only*.DAT"))
+            unique_files = os_sorted(get_unique_files([maxwell_files, mun_files]))
 
-            def plot_overburden(ch_step=1):
-                print(f">> Plotting overburden alone ({conductance})")
-                plot_max(axes,
-                         maxwell_ob_file,
-                         min_ch,
-                         max_ch,
-                         ch_step=ch_step,
-                         name="Maxwell",
-                         alpha=0.6,
-                         line_color=None,
-                         ls=styles.get("Maxwell"),
-                         data_scaling=1e-6,
-                         single_file=True,
-                         incl_label=True)
-
-                plot_mun(axes,
-                         mun_ob_file,
-                         min_ch,
-                         max_ch,
-                         ch_step=ch_step,
-                         name="MUN",
-                         alpha=1.,
-                         line_color=None,
-                         ls=styles.get("MUN"),
-                         single_file=True,
-                         incl_label=False)
-
-                format_figure(figure,
-                              f"Overburden Models\n{conductance} Overburden Only", [maxwell_ob_file, mun_ob_file],
-                              min_ch,
-                              max_ch,
-                              incl_legend=True,
-                              extra_handles=[styles.get("Maxwell"), styles.get("MUN")],
-                              extra_labels=["Maxwell", "MUN"])
-
-                pdf.savefig(figure, orientation='landscape')
-                clear_axes(axes)
-                log_scale(x_ax_log, z_ax_log)
-
-            out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Plates & Overburden Only.PDF")
+            out_pdf = sample_files.joinpath(fr"Overburden\{title}.PDF")
+            count = 0
             with PdfPages(out_pdf) as pdf:
-                plot_plates(ch_step=ch_step)
+                for stem in unique_files:
+                    stem = stem.title()
+                    print(f"Plotting model {stem} ({count + 1}/{len(unique_files)})")
+                    format_files = []
 
-                for conductance in ["1S", "10S"]:
-                    maxwell_ob_file = TEMFile().parse(Path(maxwell_folder).joinpath(fr"{conductance} Overburden Only - 50m.TEM"))
-                    mun_ob_file = MUNFile().parse(Path(mun_folder).joinpath(fr"overburden_{conductance}_V1000m_dBdt.DAT"))
-                    plot_overburden(ch_step=ch_step)
+                    max_obj = None
+                    mun_obj = None
 
-            os.startfile(out_pdf)
+                    max_file = maxwell_dir.joinpath(stem).with_suffix(".TEM")
+                    mun_file = mun_dir.joinpath(stem).with_suffix(".DAT")
 
-        def plot_contact_effect(ch_step=1):
+                    if not max_file.exists():
+                        logging_file.write(f"{stem} missing from Maxwell.\n")
+                        print(f"{stem} missing from Maxwell.")
+                    else:
+                        max_obj = TEMFile().parse(max_file)
+                        format_files.append(max_obj)
+
+                    if not mun_file.exists():
+                        logging_file.write(f"{stem} missing from MUN.\n")
+                        print(f"{stem} missing from MUN.")
+                    else:
+                        mun_obj = MUNFile().parse(mun_file)
+                        format_files.append(mun_obj)
+
+                    if not format_files:
+                        logging_file.write(f"No files found for {stem}.")
+                        print(f"No files found for {stem}.")
+                        continue
+
+                    for ch_range in channel_tuples:
+                        start_ch, end_ch = ch_range[0], ch_range[1]
+                        if ch_range[0] < min_ch:
+                            start_ch = min_ch
+                        if ch_range[1] > max_ch:
+                            end_ch = max_ch
+                        print(f"Plotting channel {start_ch} to {end_ch}")
+
+                        if max_obj:
+                            plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=0,
+                                     data_scaling=1e-6,
+                                     lc=colors.get("Maxwell")
+                                     )
+
+                        if mun_obj:
+                            plot_obj(ax_dict, mun_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=0,
+                                     filter=True,
+                                     lc=colors.get("MUN")
+                                     )
+
+                        format_figure(figure, ax_dict,
+                                      f"Overburden Model\n"
+                                      f"{stem}\n"
+                                      f"{max_obj.ch_times[start_ch - 1]}ms to {max_obj.ch_times[end_ch - 1]}ms",
+                                      format_files, start_ch, end_ch,
+                                      x_min=max_obj.data.STATION.min(),
+                                      x_max=max_obj.data.STATION.max(),
+                                      ch_step=channel_step,
+                                      incl_legend=True,
+                                      incl_legend_ls=True,
+                                      incl_legend_colors=True,
+                                      style_legend_by='time',
+                                      color_legend_by='file',
+                                      footnote="MUN data filtered using Savitzki-Golay filter.")
+
+                        pdf.savefig(figure, orientation='landscape')
+                        clear_axes(axes)
+                        log_scale([x_ax_log, z_ax_log])
+                    count += 1
+
+                if start_file:
+                    os.startfile(str(out_pdf))
+
+                runtime = get_runtime(t)
+                print(f"{title} runtime: {runtime}")
+                logging_file.write(f"{title} runtime: {runtime}\n")
+                logging_file.close()
+
+        def plot_contact_effect(title, ch_step=1, start_file=False):
             """Effects of plate contact"""
+
+            def plot_file_contact_effect(filetype, contact_files, separated_files):
+                print(F"Plotting effects of plate contact for {filetype} files")
+
+                num_chs = 5
+                channel_tuples = list(zip(np.arange(min_ch, max_ch, num_chs - 1),
+                                          np.arange(min_ch + num_chs - 1, max_ch + num_chs - 1, num_chs - 1)))
+
+                out_pdf = sample_files.joinpath(fr"Overburden\{title} ({filetype}).PDF")
+                count = 0
+                with PdfPages(out_pdf) as pdf:
+                    format_files = []
+                    for con_file, sep_file in zip(contact_files, separated_files):
+                        print(f"Plotting {con_file.stem} vs {sep_file.stem}")
+                        if filetype == "Maxwell":
+                            con_obj = TEMFile().parse(con_file)
+                            sep_obj = TEMFile().parse(sep_file)
+                        else:
+                            con_obj = MUNFile().parse(con_file)
+                            sep_obj = MUNFile().parse(sep_file)
+                        format_files.append(con_obj)
+                        format_files.append(sep_obj)
+
+                        for ch_range in channel_tuples:
+                            start_ch, end_ch = ch_range[0], ch_range[1]
+                            if ch_range[0] < min_ch:
+                                start_ch = min_ch
+                            if ch_range[1] > max_ch:
+                                end_ch = max_ch
+                            print(f"Plotting channel {start_ch} to {end_ch}")
+
+                            plot_obj(ax_dict, con_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=0,
+                                     name="Contact",
+                                     data_scaling=1e-6 if filetype == "Maxwell" else 1.,
+                                     alpha=0.6,
+                                     filter=True if filetype == "MUN" else False,
+                                     ls='-'
+                                     )
+
+                            plot_obj(ax_dict, sep_obj, start_ch, end_ch,
+                                     ch_step=channel_step,
+                                     station_shift=0,
+                                     name="Separated",
+                                     data_scaling=1e-6 if filetype == "Maxwell" else 1.,
+                                     alpha=1.,
+                                     filter=True if filetype == "MUN" else False,
+                                     ls=':'
+                                     )
+
+                            model_name = re.search(r"(\d+S Overburden - Plate #\d).*", con_file.stem).group(1)
+                            footnote = "MUN data filtered using Savitzki-Golay filter"
+                            format_figure(figure, ax_dict,
+                                          f"Overburden Model: {filetype} Plate Contact Effect\n"
+                                          f"{model_name}\n"
+                                          f"{sep_obj.ch_times[start_ch - 1]}ms to {sep_obj.ch_times[end_ch - 1]}ms",
+                                          format_files, start_ch, end_ch,
+                                          x_min=None,
+                                          x_max=None,
+                                          ch_step=channel_step,
+                                          incl_legend=True,
+                                          incl_legend_ls=True,
+                                          incl_legend_colors=True,
+                                          style_legend_by='line',
+                                          color_legend_by='time',
+                                          footnote=footnote if filetype == "MUN" else "")
+
+                            pdf.savefig(figure, orientation='landscape')
+                            clear_axes(axes)
+                            log_scale([x_ax_log, z_ax_log])
+
+                    if start_file:
+                        os.startfile(str(out_pdf))
+
+            log_file_path = sample_files.joinpath(fr"Overburden\{title} log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print(f"Plotting {title}")
+            logging_file.write(f">>Plotting {title}\n\n")
+
+            maxwell_dir = sample_files.joinpath(r"Overburden\Maxwell\Overburden+Conductor Revised")
+            mun_dir = sample_files.joinpath(r"Overburden\MUN\Overburden + plate")
+
+            max_sep_files = os_sorted(list(maxwell_dir.glob("*Spacing*.TEM")))
+            max_con_files = os_sorted(list(maxwell_dir.glob("*Contact*.TEM")))
+            mun_sep_files = os_sorted(list(mun_dir.glob("*Spacing*.DAT")))
+            mun_con_files = os_sorted(list(mun_dir.glob("*Contact*.DAT")))
+
+            plot_file_contact_effect("Maxwell", max_con_files, max_sep_files)
+            plot_file_contact_effect("MUN", mun_con_files, mun_sep_files)
+
+            runtime = get_runtime(t)
+            print(f"{title} runtime: {runtime}")
+            logging_file.write(f"{title} runtime: {runtime}\n")
+            logging_file.close()
 
             def plot_maxwell_contact_effect():
                 print(F">>Plotting Maxwell contact effect ({conductance})")
@@ -3731,43 +4026,43 @@ if __name__ == '__main__':
                 clear_axes(axes)
                 log_scale(x_ax_log, z_ax_log)
 
-            out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Effects of Plate Contact.PDF")
-            with PdfPages(out_pdf) as pdf:
-
-                for conductance in ["1S", "10S"]:
-                    maxwell_comb_sep_file1 = TEMFile().parse(
-                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
-                    maxwell_comb_sep_file2 = TEMFile().parse(
-                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
-                    maxwell_comb_con_file1 = TEMFile().parse(
-                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
-                    maxwell_comb_con_file2 = TEMFile().parse(
-                        Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
-
-                    mun_comb_sep_file1 = MUNFile().parse(
-                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
-                    mun_comb_sep_file2 = MUNFile().parse(
-                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
-                    mun_comb_con_file1 = MUNFile().parse(
-                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
-                    mun_comb_con_file2 = MUNFile().parse(
-                        Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
-
-                    channels = [f'CH{num}' for num in range(1, max_ch - min_ch + 1)]
-                    maxwell_plate1_diff = copy.deepcopy(maxwell_comb_sep_file1)
-                    maxwell_plate2_diff = copy.deepcopy(maxwell_comb_sep_file2)
-                    maxwell_plate1_diff.data.loc[:, channels] = maxwell_comb_con_file1.data.loc[:, channels] - maxwell_comb_sep_file1.data.loc[:, channels]
-                    maxwell_plate2_diff.data.loc[:, channels] = maxwell_comb_con_file2.data.loc[:, channels] - maxwell_comb_sep_file2.data.loc[:, channels]
-
-                    mun_plate1_diff = copy.deepcopy(mun_comb_sep_file1)
-                    mun_plate2_diff = copy.deepcopy(mun_comb_sep_file2)
-                    mun_plate1_diff.data.loc[:, channels] = mun_comb_con_file1.data.loc[:, channels] - mun_comb_sep_file1.data.loc[:, channels]
-                    mun_plate2_diff.data.loc[:, channels] = mun_comb_con_file2.data.loc[:, channels] - mun_comb_sep_file2.data.loc[:, channels]
-
-                    plot_maxwell_contact_effect()
-                    plot_mun_contact_effect()
-                    plot_differential()
-            os.startfile(out_pdf)
+            # out_pdf = maxwell_folder.parents[1].joinpath(r"Overburden Model - Effects of Plate Contact.PDF")
+            # with PdfPages(out_pdf) as pdf:
+            #
+            #     for conductance in ["1S", "10S"]:
+            #         maxwell_comb_sep_file1 = TEMFile().parse(
+            #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - 1m Spacing.TEM"))
+            #         maxwell_comb_sep_file2 = TEMFile().parse(
+            #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - 1m Spacing.TEM"))
+            #         maxwell_comb_con_file1 = TEMFile().parse(
+            #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #1 - Contact.TEM"))
+            #         maxwell_comb_con_file2 = TEMFile().parse(
+            #             Path(maxwell_folder).joinpath(fr"{conductance} Overburden - Plate #2 - Contact.TEM"))
+            #
+            #         mun_comb_sep_file1 = MUNFile().parse(
+            #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_detach_dBdt.DAT"))
+            #         mun_comb_sep_file2 = MUNFile().parse(
+            #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_detach_dBdt.DAT"))
+            #         mun_comb_con_file1 = MUNFile().parse(
+            #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate250_attach_dBdt.DAT"))
+            #         mun_comb_con_file2 = MUNFile().parse(
+            #             Path(mun_folder).joinpath(fr"{conductance}_overburden_plate50_attach_dBdt.DAT"))
+            #
+            #         channels = [f'CH{num}' for num in range(1, max_ch - min_ch + 1)]
+            #         maxwell_plate1_diff = copy.deepcopy(maxwell_comb_sep_file1)
+            #         maxwell_plate2_diff = copy.deepcopy(maxwell_comb_sep_file2)
+            #         maxwell_plate1_diff.data.loc[:, channels] = maxwell_comb_con_file1.data.loc[:, channels] - maxwell_comb_sep_file1.data.loc[:, channels]
+            #         maxwell_plate2_diff.data.loc[:, channels] = maxwell_comb_con_file2.data.loc[:, channels] - maxwell_comb_sep_file2.data.loc[:, channels]
+            #
+            #         mun_plate1_diff = copy.deepcopy(mun_comb_sep_file1)
+            #         mun_plate2_diff = copy.deepcopy(mun_comb_sep_file2)
+            #         mun_plate1_diff.data.loc[:, channels] = mun_comb_con_file1.data.loc[:, channels] - mun_comb_sep_file1.data.loc[:, channels]
+            #         mun_plate2_diff.data.loc[:, channels] = mun_comb_con_file2.data.loc[:, channels] - mun_comb_sep_file2.data.loc[:, channels]
+            #
+            #         plot_maxwell_contact_effect()
+            #         plot_mun_contact_effect()
+            #         plot_differential()
+            # os.startfile(out_pdf)
 
         def plot_residual(ch_step=1):
             """
@@ -4439,33 +4734,33 @@ if __name__ == '__main__':
                     # plot_enhancement_comparison(ch_step=ch_step)
             # os.startfile(out_pdf)
 
-        figure, ((x_ax, x_ax_log), (z_ax, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='col', sharey='col')
+        figure, ((x_ax, z_ax), (x_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='all', sharey='none')
+        ax_dict = {"X": (x_ax, x_ax_log), "Y": (None, None), "Z": (z_ax, z_ax_log)}
         axes = [x_ax, z_ax, x_ax_log, z_ax_log]
-        figure.set_size_inches((11 * 1.33, 8.5 * 1.33))
-        log_scale(x_ax_log, z_ax_log)
+        figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+        log_scale([x_ax_log, z_ax_log])
+
+        min_ch, max_ch = 21, 44
+        channel_step = 1
+        num_chs = 4
+        channel_tuples = list(zip(np.arange(min_ch, max_ch, num_chs - 1),
+                                  np.arange(min_ch + num_chs - 1, max_ch + num_chs - 1, num_chs - 1)))
 
         maxwell_folder = sample_files.joinpath(r"Overburden\Maxwell\Overburden+Conductor Revised")
-        assert maxwell_folder.is_dir(), f"{maxwell_folder} is not a directory."
         mun_folder = sample_files.joinpath(r"Overburden\MUN\Overburden + plate")
-        assert mun_folder.is_dir(), f"{mun_folder} is not a directory."
 
-        global min_ch, max_ch, channels, channel_step
-        min_ch, max_ch = 21, 44
-        channels = [f"CH{num}" for num in range(min_ch, max_ch + 1)]
-        channel_step = 1
+        # maxwell_plate1_file = TEMFile().parse(Path(maxwell_folder).joinpath(r"Plate #1 Only - 51m.TEM"))
+        # maxwell_plate2_file = TEMFile().parse(Path(maxwell_folder).joinpath(r"Plate #2 Only - 51m.TEM"))
+        # mun_plate1_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate250_dBdt.DAT"))
+        # mun_plate2_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate50_dBdt.DAT"))
 
-        maxwell_plate1_file = TEMFile().parse(Path(maxwell_folder).joinpath(r"Plate #1 Only - 51m.TEM"))
-        maxwell_plate2_file = TEMFile().parse(Path(maxwell_folder).joinpath(r"Plate #2 Only - 51m.TEM"))
-        mun_plate1_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate250_dBdt.DAT"))
-        mun_plate2_file = MUNFile().parse(Path(mun_folder).joinpath(r"only_plate50_dBdt.DAT"))
+        t = time.time()
 
-        # plot_overburden_and_plates(ch_step=channel_step)
-        # plot_contact_effect(ch_step=channel_step)
+        # plot_overburden_and_plates("Overburden Model - Plates & Overburden Only", ch_step=channel_step, start_file=True)
+        plot_contact_effect("Overburden Model - Plate Contact Effect", ch_step=channel_step, start_file=True)
         # plot_residual(ch_step=channel_step)
-        analyze_residual(ch_step=channel_step)
+        # analyze_residual(ch_step=channel_step)
         # plot_enhancement(ch_step=channel_step)
-
-        print(F"Plotting complete.")
 
     def plot_bentplate():
 
@@ -4699,9 +4994,9 @@ if __name__ == '__main__':
 
         mn, mx = get_folder_range(max_folder_100S, "Maxwell", start_ch=min_ch, end_ch=max_ch)
         mn, mx = mn * 1e-6, mx * 1e-6
-        # plot_individual_plates(fixed_y=False)
+        plot_individual_plates(fixed_y=False)
         # plot_combined_plates(fixed_y=False)
-        plot_residual(fixed_y=False)
+        # plot_residual(fixed_y=False)
 
         # Varying conductances
         # mn, mx = get_folder_range(folder_varying, "Maxwell", start_ch=min_ch, end_ch=max_ch)
@@ -4866,11 +5161,10 @@ if __name__ == '__main__':
     # TODO Change "MUN" to "EM3D"
     # plot_aspect_ratio()
     # plot_two_way_induction()
-    # plot_run_on_comparison()
-    # plot_run_on_convergence()
-    # tabulate_run_on_convergence()
-    plot_infinite_thin_sheet()
-    # plot_overburden()
+    # plot_run_on_effect()
+    # plot_infinite_thin_sheet()
+    # plot_infinite_half_sheet()
+    plot_overburden()
     # plot_bentplate()
     # test_savgol_filter()
 

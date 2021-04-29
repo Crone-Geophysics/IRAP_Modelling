@@ -1,0 +1,3 @@
+>>Comparing Maxwell with theory for infinite thin sheet models
+
+Maxwell infinite thin sheet theory comparison runtime: 01:22
