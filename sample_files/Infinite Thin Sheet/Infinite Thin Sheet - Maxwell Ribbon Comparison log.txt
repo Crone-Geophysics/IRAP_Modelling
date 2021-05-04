@@ -1,0 +1,3 @@
+>>Comparing Maxwell ribbons for infinite thin sheet models
+
+Maxwell infinite thin sheet ribbon comparison runtime: 00:31

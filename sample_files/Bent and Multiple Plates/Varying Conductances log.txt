@@ -1,0 +1,8 @@
+>>Plotting Varying Conductances
+
+1@10S+4@100S missing from Maxwell.
+1@10S+4@1000S missing from Maxwell.
+1@100S+4@1000S missing from Maxwell.
+1@10S+2@100S missing from Maxwell.
+1+4+5+3+6@400S missing from Maxwell.
+(1+4+5)_(3+6)@200S missing from Maxwell.

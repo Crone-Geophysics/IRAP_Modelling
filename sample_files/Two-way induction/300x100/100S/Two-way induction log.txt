@@ -1,0 +1,19 @@
+>>Plotting all 1000S two-way induction models
+
+LOOP=0 missing from MUN.
+LOOP=0 missing from PLATE.
+LOOP=-50 missing from MUN.
+LOOP=-50 missing from PLATE.
+LOOP=-100 missing from MUN.
+LOOP=-100 missing from PLATE.
+LOOP=-150 missing from MUN.
+LOOP=-150 missing from PLATE.
+LOOP=-200 missing from MUN.
+LOOP=-200 missing from PLATE.
+LOOP=-250 missing from MUN.
+LOOP=-250 missing from PLATE.
+LOOP=-300 missing from MUN.
+LOOP=-300 missing from PLATE.
+LOOP=-350 missing from MUN.
+LOOP=-350 missing from PLATE.
+Two-way induction 1000S runtime: 01:54

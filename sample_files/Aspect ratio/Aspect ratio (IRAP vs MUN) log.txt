@@ -1,0 +1,14 @@
+Plotting IRAP vs MUN
+15X150A is not available for both filetypes.
+15X150B is not available for both filetypes.
+15X150C is not available for both filetypes.
+30X150A is not available for both filetypes.
+30X150B is not available for both filetypes.
+30X150C is not available for both filetypes.
+5X150A is not available for both filetypes.
+5X150B is not available for both filetypes.
+5X150C is not available for both filetypes.
+600X15A is not available for both filetypes.
+600X15B is not available for both filetypes.
+600X15C is not available for both filetypes.
+Aspect ratio (IRAP vs MUN) runtime: 05:12

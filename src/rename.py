@@ -8,7 +8,7 @@ if not input_folder:
     print(F"Using default folder")
     input_folder = Path(__file__).absolute().parent
 else:
-    input_folder = Path(input_folder)
+    input_folder = Path(input_folder).absolute()
 print(f"Input folder: {input_folder}")
 
 output_folder = input("Enter output directory:")
@@ -16,8 +16,9 @@ if not output_folder:
     print(F"Using default folder")
     output_folder = Path(__file__).absolute().parent
 else:
-    output_folder = Path(output_folder)
+    output_folder = Path(output_folder).absolute()
 print(f"Output folder: {output_folder}")
+
 
 def copy_dat_files():
     files = list(input_folder.rglob("*.dat"))
@@ -29,6 +30,7 @@ def copy_dat_files():
         print(F"{file} to {output_folder.joinpath(file.name)}")
         shutil.copy(str(file), str(output_folder.joinpath(file.name)))
 
+
 def format_file_names():
     print("Removing '3D_modelling_results_Crone_50ms_Model8_'")
  
@@ -36,14 +38,16 @@ def format_file_names():
     for file in new_files:
         if "3D_modelling_results_Crone_50ms_Model8_" in file.name:
             print(f"Renaming {file.name} to {re.sub('3D_modelling_results_Crone_50ms_Model8_', '', file.name)}")
-            file.rename(re.sub("3D_modelling_results_Crone_50ms_Model8_", "", file.name))
+            file.rename(output_folder.joinpath(re.sub("3D_modelling_results_Crone_50ms_Model8_", "", file.name)))
     
     print("Removing '_dBdt'")
     new_files = list(output_folder.glob("*.dat"))
+    print(f"Files found to remove dBdt: {new_files}")
     for file in new_files:
         if "_dBdt" in file.name:
             print(f"Removing 'dBdt' from {file.name}")
-            file.rename(re.sub("_dBdt", "", file.name))
+            file.rename(output_folder.joinpath(re.sub("_dBdt", "", file.name)))
+
 
 def rename_files():
     def get_model_num(file_name):
@@ -76,7 +80,7 @@ def rename_files():
             model_name = f"{file_num}@{file_con}S"
         print(f"Model name for file {file.name}: {model_name}")
         
-        file.rename(model_name + '.dat')
+        file.rename(output_folder.joinpath(model_name + '.dat'))
         
 model_names = {
 "1":"1",
