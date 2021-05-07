@@ -1,3 +1,0 @@
->>Plotting infinite half sheet with loop on 175W
-
-Infinite half sheet (loop on 175W) runtime: 00:19

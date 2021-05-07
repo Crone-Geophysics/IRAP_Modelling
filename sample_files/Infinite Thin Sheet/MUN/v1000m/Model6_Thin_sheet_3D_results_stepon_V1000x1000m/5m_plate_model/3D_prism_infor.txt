@@ -1,0 +1,2 @@
+thickness of prism = 5 m.
+conductivity of prism = 10 / 5 = 2 S/m for 10-S plate.
