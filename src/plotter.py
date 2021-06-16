@@ -1947,31 +1947,31 @@ if __name__ == '__main__':
                     ax.set_prop_cycle(cycler("linestyle", line_styles))
 
         if isinstance(file, TEMFile):
-            x_data = file.data[file.data.COMPONENT == "X"]
-            y_data = file.data[file.data.COMPONENT == "Y"]
-            z_data = file.data[file.data.COMPONENT == "Z"]
+            x_data = file.data[(file.data.COMPONENT == "X") | (file.data.COMPONENT == "U")]
+            y_data = file.data[(file.data.COMPONENT == "Y") | (file.data.COMPONENT == "V")]
+            z_data = file.data[(file.data.COMPONENT == "Z") | (file.data.COMPONENT == "A")]
             channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
         elif isinstance(file, MUNFile):
-            x_data = file.data[file.data.Component == "X"]
-            y_data = file.data[file.data.Component == "Y"]
-            z_data = file.data[file.data.Component == "Z"]
+            x_data = file.data[(file.data.Component == "X") | (file.data.Component == "U")]
+            y_data = file.data[(file.data.Component == "Y") | (file.data.Component == "V")]
+            z_data = file.data[(file.data.Component == "Z") | (file.data.Component == "A")]
             channels = [f'CH{num}' for num in range(1, len(file.ch_times) + 1)]
         elif isinstance(file, PlateFFile):
-            x_data = file.data[file.data.Component == "X"]
-            y_data = file.data[file.data.Component == "Y"]
-            z_data = file.data[file.data.Component == "Z"]
+            x_data = file.data[(file.data.Component == "X") | (file.data.Component == "U")]
+            y_data = file.data[(file.data.Component == "Y") | (file.data.Component == "V")]
+            z_data = file.data[(file.data.Component == "Z") | (file.data.Component == "A")]
             channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
         elif isinstance(file, IRAPFile):
-            x_data = file.data[file.data.Component == "X"]
-            y_data = file.data[file.data.Component == "Y"]
-            z_data = file.data[file.data.Component == "Z"]
+            x_data = file.data[(file.data.Component == "X") | (file.data.Component == "U")]
+            y_data = file.data[(file.data.Component == "Y") | (file.data.Component == "V")]
+            z_data = file.data[(file.data.Component == "Z") | (file.data.Component == "A")]
             channels = [f'{num}' for num in range(1, len(file.ch_times) + 1)]
         elif isinstance(file, pd.DataFrame):
             if ch_times is None:
                 raise ValueError(f"ch_times cannot be None if a DataFrame is passed.")
-            x_data = file[file.Component == "X"]
-            y_data = file[file.Component == "Y"]
-            z_data = file[file.Component == "Z"]
+            x_data = file.data[(file.data.Component == "X") | (file.data.Component == "U")]
+            y_data = file.data[(file.data.Component == "Y") | (file.data.Component == "V")]
+            z_data = file.data[(file.data.Component == "Z") | (file.data.Component == "A")]
             channels = [f'CH{num}' for num in range(1, len(ch_times) + 1)]
         else:
             raise ValueError(f"{file} is not a valid input type.")
@@ -5719,6 +5719,170 @@ if __name__ == '__main__':
             os.startfile(str(out_pdf))
         print(f"Plotting complete after {get_runtime(t)}.")
 
+    def plot_flat_plates():
+
+        def plot_model(model_name, title, pdf, max_dir, mun_dir, logging_file, ylabel=''):
+            max_obj = None
+            mun_obj = None
+            format_files = []
+
+            if max_dir is not None:
+                max_file = max_dir.joinpath(model_name).with_suffix(".TEM")
+                if not max_file.exists():
+                    logging_file.write(f"{model_name} missing from Maxwell.\n")
+                    print(f"{model_name} missing from Maxwell.")
+                else:
+                    max_obj = TEMFile().parse(max_file)
+                    # if residual is True:
+                    #     max_obj = get_residual_file(max_obj, max_dir, model_name)
+                    format_files.append(max_obj)
+
+            if mun_dir is not None:
+                mun_file = mun_dir.joinpath(model_name).with_suffix(".DAT")
+                if not mun_file.exists():
+                    logging_file.write(f"{model_name} missing from MUN.\n")
+                    print(f"{model_name} missing from MUN.")
+                else:
+                    mun_obj = MUNFile().parse(mun_file)
+                    # if residual is True:
+                    #     mun_obj = get_residual_file(mun_obj, mun_dir, model_name)
+                    format_files.append(mun_obj)
+
+            if not format_files:
+                logging_file.write(f"No files found for {model_name}.")
+                print(f"No files found for {model_name}.")
+                return
+
+            for ch_range in channel_tuples:
+                footnote = []
+                start_ch, end_ch = ch_range[0], ch_range[1]
+                if ch_range[0] < min_ch:
+                    start_ch = min_ch
+                if ch_range[1] > max_ch:
+                    end_ch = max_ch
+                print(f"Plotting channel {start_ch} to {end_ch}")
+
+                if max_obj:
+                    plot_obj(ax_dict, max_obj, start_ch, end_ch,
+                             ch_step=channel_step,
+                             station_shift=0,
+                             data_scaling=1e-6,
+                             name="Maxwell",
+                             lc=colors.get("Maxwell")
+                             )
+
+                if mun_obj:
+                    plot_obj(ax_dict, mun_obj, start_ch, end_ch,
+                             ch_step=channel_step,
+                             station_shift=0,
+                             filter=False,
+                             name="MUN",
+                             lc=colors.get("MUN")
+                             )
+
+                # if residual:
+                #     footnote.append("MUN data filtered using Savitzki-Golay filter.")
+
+                format_figure(figure, ax_dict,
+                              f"{title}\n"
+                              f"{model_name}\n"
+                              f"{format_files[0].ch_times[start_ch - 1]}ms to {format_files[0].ch_times[end_ch - 1]}ms",
+                              format_files, start_ch, end_ch,
+                              # x_min=max_obj.data.STATION.min(),
+                              # x_max=max_obj.data.STATION.max(),
+                              ch_step=channel_step,
+                              incl_legend=True,
+                              incl_legend_ls=True,
+                              incl_legend_colors=True,
+                              style_legend_by='time',
+                              color_legend_by='line',
+                              footnote='    '.join(footnote))
+
+                pdf.savefig(figure, orientation='landscape')
+                clear_axes(axes)
+                log_scale([x_ax_log, y_ax_log, z_ax_log])
+
+        def plot_model1(title, start_file=False):
+            log_file_path = sample_files.joinpath(fr"Flat Plates\{title} log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print(f"Plotting {title}")
+            logging_file.write(f">>Plotting {title}\n\n")
+
+            out_pdf = sample_files.joinpath(fr"Flat Plates\{title}.PDF")
+
+            model_files = [
+                "Center Hole - Dual Large Plates",
+                "Center Hole - Large Plate",
+                "Edge Hole - Dual Large Plates",
+                "Edge Hole - Large Plate",
+                "In Hole - Dual Large Plate (250m east of west edge)",
+                "In Hole - Large Plate (250m east of west edge)",
+                "Off Hole - Dual Large Plates (100m west of edge)",
+                "Off Hole - Large Plate (100m west of edge)"
+            ]
+
+            count = 0
+            with PdfPages(out_pdf) as pdf:
+                for model in model_files:
+                    print(f"Plotting model {model} ({count + 1}/{len(model_files)})")
+                    plot_model(model, title, pdf, max_model1_dir, None, logging_file)
+                    count += 1
+            if start_file:
+                os.startfile(out_pdf)
+
+        def plot_model2(title, start_file=False):
+            log_file_path = sample_files.joinpath(fr"Flat Plates\{title} log.txt")
+            logging_file = open(str(log_file_path), "w+")
+
+            print(f"Plotting {title}")
+            logging_file.write(f">>Plotting {title}\n\n")
+
+            out_pdf = sample_files.joinpath(fr"Flat Plates\{title}.PDF")
+
+            model_files = [
+                "Center Hole - Dual Small Plates",
+                "Center Hole - Small Plate",
+                "Edge Hole - Dual Small Plates",
+                "Edge Hole - Small Plate",
+                "Off Hole - Dual Small Plates (50m west of edge)",
+                "Off Hole - Small Plate (50m west of edge)"
+            ]
+
+            count = 0
+            with PdfPages(out_pdf) as pdf:
+                for model in model_files:
+                    print(f"Plotting model {model} ({count + 1}/{len(model_files)})")
+                    plot_model(model, title, pdf, max_model2_dir, None, logging_file)
+                    count += 1
+            if start_file:
+                os.startfile(out_pdf)
+
+        max_model1_dir = sample_files.joinpath(r"Flat Plates\Maxwell\100x100 loop - 1000x1000 plate")
+        max_model2_dir = sample_files.joinpath(r"Flat Plates\Maxwell\400x400 loop - 50x50 plate")
+        assert all([max_model1_dir.exists(), max_model2_dir.exists()]), \
+            "One or more of the folders doesn't exist."
+
+        figure, ((x_ax, z_ax), (x_ax_log, z_ax_log)) = plt.subplots(nrows=2, ncols=2, sharex='all', sharey='none')
+        y_ax, y_ax_log = None, None
+        ax_dict = {"X": (x_ax, x_ax_log), "Y": (y_ax, y_ax_log), "Z": (z_ax, z_ax_log)}
+        axes = [x_ax, y_ax, z_ax, x_ax_log, y_ax_log, z_ax_log]
+        figure.set_size_inches((11 * 1.33 * 1.33, 8.5 * 1.33))
+        log_scale([x_ax_log, y_ax_log, z_ax_log])
+
+        min_ch, max_ch = 21, 44
+        channel_step = 1
+        num_chs = 4
+        channel_tuples = list(zip(np.arange(min_ch, max_ch, num_chs - 1),
+                                  np.arange(min_ch + num_chs - 1, max_ch + num_chs - 1, num_chs - 1)))
+
+        t = time.time()
+        plot_model1("100x100 loop - 1000x1000 plate", start_file=True)
+        plot_model2("400x400 loop - 50x50 plate", start_file=True)
+
+        runtime = get_runtime(t)
+        print(f"Flat plates runtime: {runtime}")
+
     # TODO Change "MUN" to "EM3D"
     # plot_aspect_ratio()
     # plot_two_way_induction()
@@ -5726,8 +5890,9 @@ if __name__ == '__main__':
     # plot_infinite_thin_sheet()
     # plot_infinite_half_sheet()
     # plot_overburden()
-    plot_bentplate()
+    # plot_bentplate()
     # test_savgol_filter()
+    plot_flat_plates()
 
     # tester = TestRunner()
     # tester.show()
